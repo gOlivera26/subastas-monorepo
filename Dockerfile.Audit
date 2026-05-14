@@ -1,0 +1,16 @@
+FROM mcr.microsoft.com/dotnet/runtime:8.0 AS base
+WORKDIR /app
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["PortalSubastas.Audit/PortalSubastas.Audit.Worker/PortalSubastas.Audit.Worker.csproj", "PortalSubastas.Audit/PortalSubastas.Audit.Worker/"]
+COPY ["PortalSubastas.Contracts/PortalSubastas.Contracts.csproj", "PortalSubastas.Contracts/"]
+RUN dotnet restore "PortalSubastas.Audit/PortalSubastas.Audit.Worker/PortalSubastas.Audit.Worker.csproj"
+COPY . .
+WORKDIR "/src/PortalSubastas.Audit/PortalSubastas.Audit.Worker"
+RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "PortalSubastas.Audit.Worker.dll"]

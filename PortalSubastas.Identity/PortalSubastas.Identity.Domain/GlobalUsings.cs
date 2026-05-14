@@ -1,0 +1,12 @@
+global using System;
+global using System.Collections.Generic;
+global using System.Linq;
+global using System.Threading.Tasks;
+global using Microsoft.EntityFrameworkCore;
+global using PortalSubastas.Identity.Domain.Auditable;
+global using MassTransit;
+global using Microsoft.AspNetCore.Http;
+global using Microsoft.EntityFrameworkCore.Diagnostics;
+global using System.Security.Claims;
+global using System.Text.Json;
+global using PortalSubastas.Contracts.Events;

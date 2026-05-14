@@ -1,0 +1,17 @@
+**/appsettings.json
+**/appsettings.Development.json
+!**/appsettings.Example.json
+
+## IGNORAR ARCHIVOS DE USUARIO Y TEMPORALES DE VS
+.vs/
+.idea/
+*.user
+*.useroslog
+*.sln.docstates
+
+## IGNORAR COMPILACIÓN
+bin/
+obj/
+
+## IGNORAR PAQUETES
+packages/

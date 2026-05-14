@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/PortalSubastas.Identity.Tests/PortalSubastas.Identity.Tests.csproj" />
+  </Folder>
+  <Project Path="PortalSubastas.Identity.API/PortalSubastas.Identity.API.csproj" />
+  <Project Path="PortalSubastas.Identity.Application/PortalSubastas.Identity.Application.csproj" />
+  <Project Path="PortalSubastas.Identity.Domain/PortalSubastas.Identity.Domain.csproj" />
+  <Project Path="../PortalSubastas.Contracts/PortalSubastas.Contracts.csproj" />
+  <Project Path="../PortalSubastas.Gateway/PortalSubastas.Gateway.csproj" />
+</Solution>

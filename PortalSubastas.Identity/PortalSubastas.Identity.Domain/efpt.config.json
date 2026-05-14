@@ -1,0 +1,105 @@
+﻿{
+   "CodeGenerationMode": 4,
+   "ContextClassName": "PortalSubastasContext",
+   "ContextNamespace": null,
+   "FilterSchemas": false,
+   "IncludeConnectionString": false,
+   "IrregularWords": null,
+   "MinimumProductVersion": "2.6.1248",
+   "ModelNamespace": null,
+   "OutputContextPath": null,
+   "OutputPath": "Models",
+   "PluralRules": null,
+   "PreserveCasingWithRegex": true,
+   "ProjectRootNamespace": "PortalSubastas.Identity.Domain",
+   "Schemas": null,
+   "SelectedHandlebarsLanguage": 2,
+   "SelectedToBeGenerated": 0,
+   "SingularRules": null,
+   "T4TemplatePath": null,
+   "Tables": [
+      {
+         "Name": "iam.t_estados_usuario",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_jurisdicciones_usuarios",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_modulos",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_organizaciones",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_personas",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_roles",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_roles_modulos",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_tipos_documento",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_tipos_persona",
+         "ObjectType": 0
+      },
+      {
+         "Name": "iam.t_usuarios",
+         "ObjectType": 0
+      },
+      {
+         "Name": "negocio.t_proveedores",
+         "ObjectType": 0
+      },
+      {
+         "Name": "negocio.t_proveedores_representantes",
+         "ObjectType": 0
+      },
+      {
+         "Name": "negocio.t_proveedores_rubros",
+         "ObjectType": 0
+      },
+      {
+         "Name": "negocio.t_rubros",
+         "ObjectType": 0
+      }
+   ],
+   "UiHint": null,
+   "UncountableWords": null,
+   "UseAsyncStoredProcedureCalls": true,
+   "UseBoolPropertiesWithoutDefaultSql": false,
+   "UseDatabaseNames": false,
+   "UseDatabaseNamesForRoutines": true,
+   "UseDateOnlyTimeOnly": true,
+   "UseDbContextSplitting": false,
+   "UseDecimalDataAnnotationForSprocResult": true,
+   "UseFluentApiOnly": true,
+   "UseHandleBars": false,
+   "UseHierarchyId": false,
+   "UseInflector": true,
+   "UseInternalAccessModifiersForSprocsAndFunctions": false,
+   "UseLegacyPluralizer": false,
+   "UseManyToManyEntity": false,
+   "UseNoDefaultConstructor": false,
+   "UseNoNavigations": false,
+   "UseNoObjectFilter": false,
+   "UseNodaTime": false,
+   "UseNullableReferences": false,
+   "UsePrefixNavigationNaming": false,
+   "UseSchemaFolders": false,
+   "UseSchemaNamespaces": false,
+   "UseSpatial": false,
+   "UseT4": false,
+   "UseT4Split": false
+}

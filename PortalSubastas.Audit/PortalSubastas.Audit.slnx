@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../PortalSubastas.Contracts/PortalSubastas.Contracts.csproj" />
+  <Project Path="PortalSubastas.Audit.Worker/PortalSubastas.Audit.Worker.csproj" />
+</Solution>
