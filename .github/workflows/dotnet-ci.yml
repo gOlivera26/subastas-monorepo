@@ -1,0 +1,35 @@
+name: .NET 8 CI - Subastas Monorepo
+
+on:
+  push:
+    branches: [ "master", "main", "Development" ]
+  pull_request:
+    branches: [ "master", "main", "Development" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Restore dependencies
+      run: |
+        dotnet restore PortalSubastas.Identity/PortalSubastas.Identity.slnx
+        dotnet restore PortalSubastas.Audit/PortalSubastas.Audit.slnx
+        dotnet restore PortalSubastas.Gateway/PortalSubastas.Gateway.slnx
+
+    - name: Build
+      run: |
+        dotnet build PortalSubastas.Identity/PortalSubastas.Identity.slnx --configuration Release --no-restore
+        dotnet build PortalSubastas.Audit/PortalSubastas.Audit.slnx --configuration Release --no-restore
+        dotnet build PortalSubastas.Gateway/PortalSubastas.Gateway.slnx --configuration Release --no-restore
+
+    - name: Test with Coverage
+      run: dotnet test PortalSubastas.Identity/PortalSubastas.Identity.slnx --configuration Release --no-build --collect:"XPlat Code Coverage" --logger "console;verbosity=normal"
