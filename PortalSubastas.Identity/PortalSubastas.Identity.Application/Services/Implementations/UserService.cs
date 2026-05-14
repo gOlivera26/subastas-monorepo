@@ -106,6 +106,9 @@ public class UserService : BaseService, IUserService
         PrepareAuditableEntity(usuario, isNew: false);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "RESETEO_PASSWORD", "IAM",
+    new { Mensaje = $"Un administrador reseteó la contraseña del usuario {usuario.EmailLogin}" });
+
         return Ok(tempPassword);
     }
 
@@ -151,6 +154,9 @@ public class UserService : BaseService, IUserService
         PrepareAuditableEntity(usuario, isNew: false);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "CAMBIO_ROL", "IAM",
+    new { Mensaje = $"Se actualizó el rol del usuario {usuario.EmailLogin} al rol ID: {newRoleId}" });
+
         return Ok(true);
     }
 
@@ -180,6 +186,10 @@ public class UserService : BaseService, IUserService
         }
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "USUARIO_VINCULADO", "IAM",
+    new { Mensaje = $"Se vinculó el usuario {usuario.EmailLogin} como {request.TipoEntidad} (ID: {request.IdEntidad})" });
+
         return Ok(true);
     }
 }

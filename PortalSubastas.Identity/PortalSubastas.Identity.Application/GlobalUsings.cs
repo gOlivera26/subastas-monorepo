@@ -23,3 +23,4 @@ global using System.IdentityModel.Tokens.Jwt;
 global using BC = BCrypt.Net.BCrypt;
 global using PortalSubastas.Identity.Application.RequestDto.Login;
 global using PortalSubastas.Identity.Application.ResponseDto.Perfil;
+global using MassTransit;

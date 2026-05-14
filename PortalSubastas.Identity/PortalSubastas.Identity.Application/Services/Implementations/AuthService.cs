@@ -4,17 +4,20 @@ public class AuthService : BaseService, IAuthService
 {
     private readonly PortalSubastasContext _identityContext;
     private readonly IConfiguration _configuration;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public AuthService(
-        PortalSubastasContext context,
-        IConfiguration configuration,
-        IMapper mapper,
-        IHttpContextAccessor httpContextAccessor,
-        IMemoryCache cache)
-        : base(context, mapper, httpContextAccessor, cache)
+    PortalSubastasContext context,
+    IConfiguration configuration,
+    IMapper mapper,
+    IHttpContextAccessor httpContextAccessor,
+    IMemoryCache cache,
+    IPublishEndpoint publishEndpoint)
+    : base(context, mapper, httpContextAccessor, cache)
     {
         _identityContext = context;
         _configuration = configuration;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<LoginResponseDto>> LoginAsync(LoginRequestDto request)
@@ -61,6 +64,9 @@ public class AuthService : BaseService, IAuthService
             Rol = usuario.IdRolNavigation.Nombre,
             Modulos = modulosPermitidos
         };
+
+        await PublishSystemLogAsync(_publishEndpoint, "INICIO_SESION", "IAM",
+    new { Mensaje = $"El usuario {usuario.EmailLogin} inició sesión exitosamente." });
 
         return Ok(response);
     }
@@ -134,6 +140,9 @@ public class AuthService : BaseService, IAuthService
             return InternalServerError<LoginResponseDto>($"Error al procesar el registro: {transactionResult.Message}");
         }
 
+        await PublishSystemLogAsync(_publishEndpoint, "NUEVO_REGISTRO", "IAM",
+    new { Mensaje = $"Nuevo usuario registrado en el sistema: {request.Email} (Documento: {request.NroDocumento})" });
+
         return Ok(new LoginResponseDto
         {
             NombreUsuario = $"{request.Nombre} {request.Apellido}",
@@ -172,6 +181,9 @@ public class AuthService : BaseService, IAuthService
         PrepareAuditableEntity(usuario, isNew: false);
         _identityContext.TUsuarios.Update(usuario);
         await _identityContext.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "CAMBIO_PASSWORD", "IAM",
+    new { Mensaje = $"El usuario {usuario.EmailLogin} modificó su contraseña personal." });
 
         return Ok(true);
     }
