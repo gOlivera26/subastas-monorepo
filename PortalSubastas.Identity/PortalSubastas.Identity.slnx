@@ -6,5 +6,5 @@
   <Project Path="PortalSubastas.Identity.Application/PortalSubastas.Identity.Application.csproj" />
   <Project Path="PortalSubastas.Identity.Domain/PortalSubastas.Identity.Domain.csproj" />
   <Project Path="../PortalSubastas.Contracts/PortalSubastas.Contracts.csproj" />
-  <Project Path="../PortalSubastas.Gateway/PortalSubastas.Gateway.csproj" />
+  <Project Path="../PortalSubastas.Gateway/PortalSubastas.Gateway/PortalSubastas.Gateway.csproj" />
 </Solution>
