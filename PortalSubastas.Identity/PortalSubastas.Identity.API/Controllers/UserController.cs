@@ -71,9 +71,9 @@ public class UserController : BaseController
     [HttpGet("active")]
     [Authorize]
     [ProducesResponseType(typeof(OperationResponse<List<ActiveUserDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetActiveUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string searchTerm = "")
+    public async Task<IActionResult> GetActiveUsers([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string searchTerm = "", [FromQuery] string? sortBy = null, [FromQuery] string? sortDirection = null)
     {
-        var result = await _userService.GetActiveUsersAsync(page, pageSize, searchTerm);
+        var result = await _userService.GetActiveUsersAsync(page, pageSize, searchTerm, sortBy, sortDirection);
         return Return(result);
     }
 

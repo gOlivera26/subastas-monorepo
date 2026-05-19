@@ -35,6 +35,12 @@ public partial class PortalSubastasContext : DbContext
 
     public virtual DbSet<TRubro> TRubros { get; set; }
 
+    public virtual DbSet<TTipoDomicilio> TTiposDomicilio { get; set; }
+
+    public virtual DbSet<TProvincia> TProvincias { get; set; }
+
+    public virtual DbSet<TDomicilio> TDomicilios { get; set; }
+
     public virtual DbSet<TTiposDocumento> TTiposDocumentos { get; set; }
 
     public virtual DbSet<TTiposPersona> TTiposPersonas { get; set; }
@@ -491,6 +497,7 @@ public partial class PortalSubastasContext : DbContext
                 .IsRequired()
                 .HasMaxLength(255)
                 .HasColumnName("descripcion");
+            entity.Property(e => e.IdRubroPadre).HasColumnName("id_rubro_padre");
             entity.Property(e => e.FecBaja)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("fec_baja");
@@ -511,6 +518,79 @@ public partial class PortalSubastasContext : DbContext
             entity.Property(e => e.UsrMod)
                 .HasMaxLength(100)
                 .HasColumnName("usr_mod");
+
+            entity.HasOne(d => d.IdRubroPadreNavigation).WithMany(p => p.Hijos)
+                .HasForeignKey(d => d.IdRubroPadre)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_rubros_id_rubro_padre_fkey");
+        });
+
+        modelBuilder.Entity<TTipoDomicilio>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("t_tipos_domicilio_pkey");
+            entity.ToTable("t_tipos_domicilio", "negocio");
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Descripcion).IsRequired().HasMaxLength(50).HasColumnName("descripcion");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+        });
+
+        modelBuilder.Entity<TProvincia>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("t_provincias_pkey");
+            entity.ToTable("t_provincias", "negocio");
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Nombre).IsRequired().HasMaxLength(100).HasColumnName("nombre");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+        });
+
+        modelBuilder.Entity<TDomicilio>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("t_domicilios_pkey");
+            entity.ToTable("t_domicilios", "negocio");
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.IdPersona).HasColumnName("id_persona");
+            entity.Property(e => e.IdTipoDomicilio).HasColumnName("id_tipo_domicilio");
+            entity.Property(e => e.Calle).IsRequired().HasMaxLength(255).HasColumnName("calle");
+            entity.Property(e => e.Numero).IsRequired().HasMaxLength(20).HasColumnName("numero");
+            entity.Property(e => e.Piso).HasMaxLength(20).HasColumnName("piso");
+            entity.Property(e => e.Departamento).HasMaxLength(20).HasColumnName("departamento");
+            entity.Property(e => e.Barrio).IsRequired().HasMaxLength(255).HasColumnName("barrio");
+            entity.Property(e => e.Ciudad).IsRequired().HasMaxLength(255).HasColumnName("ciudad");
+            entity.Property(e => e.IdProvincia).HasColumnName("id_provincia");
+            entity.Property(e => e.CodigoPostal).IsRequired().HasMaxLength(20).HasColumnName("codigo_postal");
+            entity.Property(e => e.Telefono).IsRequired().HasMaxLength(50).HasColumnName("telefono");
+            entity.Property(e => e.Fax).HasMaxLength(50).HasColumnName("fax");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+
+            entity.HasOne(d => d.IdPersonaNavigation).WithMany(p => p.TDomicilios)
+                .HasForeignKey(d => d.IdPersona)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_domicilios_id_persona_fkey");
+
+            entity.HasOne(d => d.IdTipoDomicilioNavigation).WithMany(p => p.TDomicilios)
+                .HasForeignKey(d => d.IdTipoDomicilio)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_domicilios_id_tipo_domicilio_fkey");
+
+            entity.HasOne(d => d.IdProvinciaNavigation).WithMany(p => p.TDomicilios)
+                .HasForeignKey(d => d.IdProvincia)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_domicilios_id_provincia_fkey");
         });
 
         modelBuilder.Entity<TTiposDocumento>(entity =>

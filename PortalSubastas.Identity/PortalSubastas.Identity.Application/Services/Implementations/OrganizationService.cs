@@ -1,6 +1,4 @@
-﻿using PortalSubastas.Identity.Application.ResponseDto.Organizacion;
-
-namespace PortalSubastas.Identity.Application.Services.Implementations;
+﻿namespace PortalSubastas.Identity.Application.Services.Implementations;
 
 public class OrganizationService : BaseService, IOrganizationService
 {
