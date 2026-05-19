@@ -1,0 +1,25 @@
+using PortalSubastas.Providers.API.Config;
+using PortalSubastas.Providers.API.Middlewares;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddConfig(builder.Configuration);
+
+var app = builder.Build();
+
+app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
+
+public partial class Program { }

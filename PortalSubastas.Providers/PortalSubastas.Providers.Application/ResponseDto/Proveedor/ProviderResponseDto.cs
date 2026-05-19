@@ -1,5 +1,4 @@
-﻿
-namespace PortalSubastas.Identity.Application.ResponseDto.Proveedor;
+namespace PortalSubastas.Providers.Application.ResponseDto.Proveedor;
 
 public class ProviderResponseDto
 {

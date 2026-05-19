@@ -24,3 +24,8 @@ global using BC = BCrypt.Net.BCrypt;
 global using PortalSubastas.Identity.Application.RequestDto.Login;
 global using PortalSubastas.Identity.Application.ResponseDto.Perfil;
 global using MassTransit;
+global using PortalSubastas.Contracts.Events;
+global using PortalSubastas.Identity.Application.RequestDto.Users;
+global using PortalSubastas.Identity.Application.ResponseDto.Users;
+global using PortalSubastas.Identity.Application.ResponseDto.Organizacion;
+global using PortalSubastas.Identity.Application.ResponseDto.Role;

@@ -1,9 +1,4 @@
-﻿using MassTransit;
-using PortalSubastas.Contracts.Events;
-using PortalSubastas.Identity.Application.RequestDto.Users;
-using PortalSubastas.Identity.Application.ResponseDto.Users;
-
-namespace PortalSubastas.Identity.Application.Services.Implementations;
+﻿namespace PortalSubastas.Identity.Application.Services.Implementations;
 
 public class UserService : BaseService, IUserService
 {
@@ -54,7 +49,7 @@ public class UserService : BaseService, IUserService
         return Ok(true);
     }
 
-    public async Task<OperationResponse<List<ActiveUserDto>>> GetActiveUsersAsync(int page, int pageSize, string searchTerm)
+    public async Task<OperationResponse<List<ActiveUserDto>>> GetActiveUsersAsync(int page, int pageSize, string searchTerm, string? sortBy = null, string? sortDirection = null)
     {
         var query = _context.TUsuarios
             .Include(u => u.IdPersonaNavigation)
@@ -74,14 +69,21 @@ public class UserService : BaseService, IUserService
                 u.EmailLogin.ToLower().Contains(searchTerm));
         }
 
-        var totalRows = await query.CountAsync();
-        var users = await query
-            .OrderBy(u => u.IdPersonaNavigation.Apellido)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        query = (sortBy, sortDirection?.ToLower()) switch
+        {
+            ("nombreCompleto", "desc") => query.OrderByDescending(u => u.IdPersonaNavigation.Apellido),
+            ("nombreCompleto", _) => query.OrderBy(u => u.IdPersonaNavigation.Apellido),
+            ("estado", "desc") => query.OrderByDescending(u => u.IdEstadoNavigation.Descripcion),
+            ("estado", _) => query.OrderBy(u => u.IdEstadoNavigation.Descripcion),
+            ("documento", "desc") => query.OrderByDescending(u => u.IdPersonaNavigation.NroDocumento),
+            ("documento", _) => query.OrderBy(u => u.IdPersonaNavigation.NroDocumento),
+            _ => query.OrderBy(u => u.IdPersonaNavigation.Apellido)
+        };
 
-        return Ok(_mapper.Map<List<ActiveUserDto>>(users), totalRows);
+        var result = await GetPagedDataAsync<TUsuario, ActiveUserDto>(page, pageSize, query);
+        var (data, total) = result.Data;
+
+        return Ok(data, total);
     }
 
     public async Task<OperationResponse<UserAuditDto>> GetUserAuditAsync(Guid userId)

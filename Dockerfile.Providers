@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+EXPOSE 8080
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["PortalSubastas.Providers/PortalSubastas.Providers.API/PortalSubastas.Providers.API.csproj", "PortalSubastas.Providers/PortalSubastas.Providers.API/"]
+COPY ["PortalSubastas.Providers/PortalSubastas.Providers.Application/PortalSubastas.Providers.Application.csproj", "PortalSubastas.Providers/PortalSubastas.Providers.Application/"]
+COPY ["PortalSubastas.Providers/PortalSubastas.Providers.Domain/PortalSubastas.Providers.Domain.csproj", "PortalSubastas.Providers/PortalSubastas.Providers.Domain/"]
+COPY ["PortalSubastas.Contracts/PortalSubastas.Contracts.csproj", "PortalSubastas.Contracts/"]
+RUN dotnet restore "PortalSubastas.Providers/PortalSubastas.Providers.API/PortalSubastas.Providers.API.csproj"
+COPY . .
+WORKDIR "/src/PortalSubastas.Providers/PortalSubastas.Providers.API"
+RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "PortalSubastas.Providers.API.dll"]

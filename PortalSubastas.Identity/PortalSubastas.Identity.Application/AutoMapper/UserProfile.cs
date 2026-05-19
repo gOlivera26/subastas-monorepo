@@ -1,5 +1,3 @@
-using PortalSubastas.Identity.Application.ResponseDto.Users;
-
 namespace PortalSubastas.Identity.Application.AutoMapper;
 
 public class UserProfile : Profile

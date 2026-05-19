@@ -1,0 +1,57 @@
+# .NET template
+## Ignore build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## VS results
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+*.rsuser
+*.rsuser
+
+## .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## IDE
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+## Package directories
+packages/
+*.nupkg
+
+## Test results
+TestResults/
+coverage/
+
+## Debug logs
+*.log
+
+## Azure Functions
+local.settings.json
+appsettings.Development.json
+
+## AWS
+awscredentials.json
+appsettings.Development.json
+
+## Ignorar configuración local de Agentes IA
+.agent/
+CLAUDE.md
