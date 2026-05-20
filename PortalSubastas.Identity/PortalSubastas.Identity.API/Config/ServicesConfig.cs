@@ -147,6 +147,8 @@ public static class ServicesConfig
         services.AddScoped<IProviderService, ProviderService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<IVigenciaService, VigenciaService>();
+        services.AddScoped<IUnidadAdministrativaService, UnidadAdministrativaService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)
