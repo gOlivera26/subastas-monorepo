@@ -1,6 +1,4 @@
-﻿using PortalSubastas.Identity.Application.ResponseDto.Role;
-
-namespace PortalSubastas.Identity.Application.Services.Implementations;
+﻿namespace PortalSubastas.Identity.Application.Services.Implementations;
 
 public class RoleService : BaseService, IRoleService
 {

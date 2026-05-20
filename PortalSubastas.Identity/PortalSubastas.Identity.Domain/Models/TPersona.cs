@@ -42,4 +42,6 @@ public partial class TPersona : IFullAuditableEntity
     public virtual ICollection<TProveedoresRepresentante> TProveedoresRepresentantes { get; set; } = new List<TProveedoresRepresentante>();
 
     public virtual ICollection<TUsuario> TUsuarios { get; set; } = new List<TUsuario>();
+
+    public virtual ICollection<TDomicilio> TDomicilios { get; set; } = new List<TDomicilio>();
 }

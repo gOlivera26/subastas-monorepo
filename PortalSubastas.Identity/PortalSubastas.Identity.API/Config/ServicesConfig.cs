@@ -144,7 +144,6 @@ public static class ServicesConfig
     {
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IOrganizationService, OrganizationService>();
-        services.AddScoped<IProviderService, ProviderService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IVigenciaService, VigenciaService>();

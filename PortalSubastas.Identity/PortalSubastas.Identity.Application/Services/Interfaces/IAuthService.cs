@@ -1,7 +1,4 @@
-﻿using PortalSubastas.Identity.Application.RequestDto.Login;
-using PortalSubastas.Identity.Application.ResponseDto.Perfil;
-
-namespace PortalSubastas.Identity.Application.Services.Interfaces
+﻿namespace PortalSubastas.Identity.Application.Services.Interfaces
 {
     public interface IAuthService
     {

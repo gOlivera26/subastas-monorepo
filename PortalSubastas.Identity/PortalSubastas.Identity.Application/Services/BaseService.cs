@@ -1,14 +1,11 @@
-﻿using MassTransit;
-using PortalSubastas.Contracts.Events;
-
-namespace PortalSubastas.Identity.Application.Services;
+﻿namespace PortalSubastas.Identity.Application.Services;
 
 public abstract class BaseService
 {
-    protected readonly DbContext _context;
-    protected readonly IMapper _mapper;
-    protected readonly IHttpContextAccessor _httpContextAccessor;
-    protected readonly IMemoryCache _cache;
+    protected readonly DbContext _context = null!;
+    protected readonly IMapper _mapper = null!;
+    protected readonly IHttpContextAccessor _httpContextAccessor = null!;
+    protected readonly IMemoryCache _cache = null!;
     private static ConcurrentDictionary<string, bool> _cacheKeys = new();
 
     protected BaseService() { }
@@ -118,7 +115,7 @@ public abstract class BaseService
     protected void PrepareAuditableEntity<T>(T entity, bool isNew, bool isDeleted = false)
     {
         var username = GetCurrentUsername();
-        var now = DateTime.UtcNow;
+        var now = DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Unspecified);
 
         if (entity is IAuditableEntity auditable)
         {
@@ -154,29 +151,25 @@ public abstract class BaseService
             Module: module,
             Details: JsonSerializer.Serialize(details),
             IpAddress: ipAddress,
-            OccurredAt: DateTime.UtcNow
+            OccurredAt: DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Unspecified)
         );
 
         await publishEndpoint.Publish(logEvent);
     }
 
-    protected async Task<OperationResponse<List<TDto>>> GetPagedDataAsync<TEntity, TDto>(int page, int pageSize,
+    protected async Task<OperationResponse<(List<TDto> Data, int Total)>> GetPagedDataAsync<TEntity, TDto>(int page, int pageSize,
         IQueryable<TEntity> query)
     {
         var total = await query.CountAsync();
 
-        if (total == 0)
-        {
-            return NotFound<List<TDto>>();
-        }
-
-        var entitiesFilter = await query
+        var entities = await query
             .Skip((page - 1) * pageSize)
-            .Take(pageSize).ToListAsync();
+            .Take(pageSize)
+            .ToListAsync();
 
-        var dtos = _mapper.Map<List<TDto>>(entitiesFilter);
+        var dtos = _mapper.Map<List<TDto>>(entities);
 
-        return Ok(dtos, total);
+        return Ok((dtos, total), total);
     }
 
     protected int GetJurisdiccionCache()
