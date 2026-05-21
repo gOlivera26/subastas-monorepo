@@ -20,4 +20,5 @@ public partial class TOrganizacione
     public DateTime? FecCreacion { get; set; }
 
     public virtual ICollection<TJurisdiccionesUsuario> TJurisdiccionesUsuarios { get; set; } = new List<TJurisdiccionesUsuario>();
+    public virtual ICollection<TUnidadAdministrativa> TUnidadesAdministrativas { get; set; } = new List<TUnidadAdministrativa>();
 }

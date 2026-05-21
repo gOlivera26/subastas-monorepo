@@ -112,6 +112,17 @@ public abstract class BaseService
         return int.TryParse(claimId, out int id) ? id : null;
     }
 
+    protected int? GetUserOrganizationId()
+    {
+        var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("IdOrganizacion");
+        return claim != null && int.TryParse(claim.Value, out int orgId) ? orgId : null;
+    }
+
+    protected bool IsSuperAdmin()
+    {
+        return _httpContextAccessor?.HttpContext?.User?.IsInRole("SUPERADMIN") == true;
+    }
+
     protected void PrepareAuditableEntity<T>(T entity, bool isNew, bool isDeleted = false)
     {
         var username = GetCurrentUsername();

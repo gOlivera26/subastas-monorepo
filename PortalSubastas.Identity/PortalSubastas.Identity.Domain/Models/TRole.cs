@@ -28,4 +28,6 @@ public partial class TRole : IFullAuditableEntity
     public virtual ICollection<TRolesModulo> TRolesModulos { get; set; } = new List<TRolesModulo>();
 
     public virtual ICollection<TUsuario> TUsuarios { get; set; } = new List<TUsuario>();
+
+    public virtual ICollection<TRolesPagina> TRolesPaginas { get; set; } = new List<TRolesPagina>();
 }

@@ -15,6 +15,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.MapHealthChecks("/health").AllowAnonymous();
+
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
