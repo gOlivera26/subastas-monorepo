@@ -1,10 +1,12 @@
 ﻿using PortalSubastas.Identity.Application.RequestDto.Organizacion;
 using PortalSubastas.Identity.Application.ResponseDto.Organizacion;
+using PortalSubastas.Identity.API.Middlewares;
 
 namespace PortalSubastas.Identity.API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [RequireModule("clasificadores.organizaciones")]
     public class OrganizationController : BaseController
     {
         private readonly IOrganizationService _organizationService;

@@ -15,10 +15,18 @@ public class OrganizationService : BaseService, IOrganizationService
 
     public async Task<OperationResponse<List<OrganizationResponseDto>>> GetAllAsync()
     {
-        var organizaciones = await _context.TOrganizaciones
-            .OrderBy(o => o.Nombre)
-            .ToListAsync();
+        var query = _context.TOrganizaciones.AsQueryable();
 
+        if (!IsSuperAdmin())
+        {
+            var orgId = GetUserOrganizationId();
+            if (orgId.HasValue)
+                query = query.Where(o => o.IdOrganizacion == orgId.Value);
+            else
+                return Ok(new List<OrganizationResponseDto>());
+        }
+
+        var organizaciones = await query.OrderBy(o => o.Nombre).ToListAsync();
         return Ok(_mapper.Map<List<OrganizationResponseDto>>(organizaciones));
     }
 

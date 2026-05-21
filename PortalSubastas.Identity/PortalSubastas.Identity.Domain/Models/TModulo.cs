@@ -34,4 +34,6 @@ public partial class TModulo : IFullAuditableEntity
     public DateTime? FecBaja { get; set; }
 
     public virtual ICollection<TRolesModulo> TRolesModulos { get; set; } = new List<TRolesModulo>();
+
+    public virtual ICollection<TPagina> TPaginas { get; set; } = new List<TPagina>();
 }

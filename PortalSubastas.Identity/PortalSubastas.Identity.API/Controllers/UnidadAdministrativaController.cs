@@ -1,10 +1,12 @@
 using PortalSubastas.Identity.Application.RequestDto.UnidadAdministrativa;
 using PortalSubastas.Identity.Application.ResponseDto.UnidadAdministrativa;
+using PortalSubastas.Identity.API.Middlewares;
 
 namespace PortalSubastas.Identity.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
+[RequireModule("clasificadores.unidades-administrativas")]
 public class UnidadAdministrativaController : BaseController
 {
     private readonly IUnidadAdministrativaService _unidadService;

@@ -15,13 +15,22 @@ public class UnidadAdministrativaService : BaseService, IUnidadAdministrativaSer
 
     public async Task<OperationResponse<List<UnidadAdministrativaResponseDto>>> GetByVigenciaAsync(int idVigencia)
     {
-        var unidades = await _context.TUnidadesAdministrativas
+        var query = _context.TUnidadesAdministrativas
             .Where(u => u.IdVigencia == idVigencia)
             .Include(u => u.IdVigenciaNavigation)
             .Include(u => u.IdOrganizacionNavigation)
-            .OrderBy(u => u.NumeroUnidadAdm)
-            .ToListAsync();
+            .AsQueryable();
 
+        if (!IsSuperAdmin())
+        {
+            var orgId = GetUserOrganizationId();
+            if (orgId.HasValue)
+                query = query.Where(u => u.IdOrganizacion == null || u.IdOrganizacion == orgId.Value);
+            else
+                query = query.Where(u => u.IdOrganizacion == null);
+        }
+
+        var unidades = await query.OrderBy(u => u.NumeroUnidadAdm).ToListAsync();
         return Ok(_mapper.Map<List<UnidadAdministrativaResponseDto>>(unidades));
     }
 
@@ -57,8 +66,6 @@ public class UnidadAdministrativaService : BaseService, IUnidadAdministrativaSer
         unidad.NombreUnidadAdm = dto.NombreUnidadAdm;
         unidad.IdVigencia = dto.IdVigencia;
         unidad.IdOrganizacion = dto.IdOrganizacion;
-        unidad.NroServicioAdm = dto.NroServicioAdm;
-        unidad.IdProveedor = dto.IdProveedor;
         unidad.Mail = dto.Mail;
         unidad.Alias = dto.Alias;
         unidad.Puerto = dto.Puerto;
