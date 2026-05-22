@@ -11,11 +11,11 @@ public partial class TCatalogoBien : IFullAuditableEntity
     public int IdVigencia { get; set; }
     public int? IdOrganizacion { get; set; }
     public int? IdObjetoGasto { get; set; }
-    public string UsrIng { get; set; }
+    public string? UsrIng { get; set; }
     public DateTime? FecIng { get; set; }
-    public string UsrMod { get; set; }
+    public string? UsrMod { get; set; }
     public DateTime? FecMod { get; set; }
-    public string UsrBaja { get; set; }
+    public string? UsrBaja { get; set; }
     public DateTime? FecBaja { get; set; }
 
     public virtual TCatalogoBien IdItemRelNavigation { get; set; }

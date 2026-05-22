@@ -25,6 +25,14 @@ public class UnidadAdministrativaController : BaseController
         return Return(result);
     }
 
+    [HttpGet]
+    [Authorize]
+    public async Task<IActionResult> GetAll()
+    {
+        var result = await _unidadService.GetAllAsync();
+        return Return(result);
+    }
+
     [HttpGet("{id:int}")]
     [Authorize]
     [ProducesResponseType(typeof(OperationResponse<UnidadAdministrativaResponseDto>), StatusCodes.Status200OK)]

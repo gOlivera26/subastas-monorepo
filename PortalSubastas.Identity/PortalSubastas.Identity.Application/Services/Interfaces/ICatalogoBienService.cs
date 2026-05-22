@@ -10,4 +10,5 @@ public interface ICatalogoBienService
     Task<OperationResponse<CatalogoBienResponseDto>> CreateAsync(CatalogoBienRequestDto dto);
     Task<OperationResponse<CatalogoBienResponseDto>> UpdateAsync(int id, CatalogoBienRequestDto dto);
     Task<OperationResponse<bool>> DeleteAsync(int id);
+    Task<OperationResponse<int>> UploadCsvAsync(CatalogoBienBulkUploadDto bulk);
 }

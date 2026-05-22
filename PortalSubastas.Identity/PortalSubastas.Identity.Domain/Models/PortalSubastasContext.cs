@@ -61,6 +61,10 @@ public partial class PortalSubastasContext : DbContext
 
     public virtual DbSet<TRolesPagina> TRolesPaginas { get; set; }
 
+    public virtual DbSet<TMoneda> TMonedas { get; set; }
+
+    public virtual DbSet<TSubResponsable> TSubResponsables { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<TEstadosUsuario>(entity =>
@@ -1003,6 +1007,42 @@ public partial class PortalSubastasContext : DbContext
             entity.HasOne(d => d.IdVigenciaNavigation).WithMany()
                 .HasForeignKey(d => d.IdVigencia).OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("t_categorias_programaticas_id_vigencia_fkey");
+        });
+
+        modelBuilder.Entity<TMoneda>(entity =>
+        {
+            entity.HasKey(e => e.IdMoneda).HasName("t_moneda_pkey");
+            entity.ToTable("t_moneda", "negocio");
+            entity.Property(e => e.IdMoneda).HasColumnName("id_moneda");
+            entity.Property(e => e.Simbolo).HasMaxLength(10).HasColumnName("simbolo");
+            entity.Property(e => e.Nombre).IsRequired().HasMaxLength(200).HasColumnName("nombre");
+            entity.Property(e => e.Descripcion).HasMaxLength(500).HasColumnName("descripcion");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+        });
+
+        modelBuilder.Entity<TSubResponsable>(entity =>
+        {
+            entity.HasKey(e => e.IdSubResponsable).HasName("t_sub_responsables_pkey");
+            entity.ToTable("t_sub_responsables", "negocio");
+            entity.Property(e => e.IdSubResponsable).HasColumnName("id_sub_responsable");
+            entity.Property(e => e.Codigo).HasMaxLength(20).HasColumnName("codigo");
+            entity.Property(e => e.Nombre).IsRequired().HasMaxLength(500).HasColumnName("nombre");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+            entity.Property(e => e.IdSubRespRel).HasColumnName("id_sub_resp_rel");
+            entity.Property(e => e.Vigente).HasColumnName("vigente");
+            entity.Property(e => e.IdUnidadAdm).HasColumnName("id_unidad_adm");
+
+            entity.HasOne(d => d.IdSubRespRelNavigation).WithMany(p => p.InverseIdSubRespRelNavigation)
+                .HasForeignKey(d => d.IdSubRespRel).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_sub_responsables_id_sub_resp_rel_fkey");
+            entity.HasOne(d => d.IdUnidadAdmNavigation).WithMany()
+                .HasForeignKey(d => d.IdUnidadAdm).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_sub_responsables_id_unidad_adm_fkey");
         });
 
         OnModelCreatingPartial(modelBuilder);

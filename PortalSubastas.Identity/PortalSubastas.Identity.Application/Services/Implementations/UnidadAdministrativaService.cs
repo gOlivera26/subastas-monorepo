@@ -34,6 +34,26 @@ public class UnidadAdministrativaService : BaseService, IUnidadAdministrativaSer
         return Ok(_mapper.Map<List<UnidadAdministrativaResponseDto>>(unidades));
     }
 
+    public async Task<OperationResponse<List<UnidadAdministrativaResponseDto>>> GetAllAsync()
+    {
+        var query = _context.TUnidadesAdministrativas
+            .Include(u => u.IdVigenciaNavigation)
+            .Include(u => u.IdOrganizacionNavigation)
+            .AsQueryable();
+
+        if (!IsSuperAdmin())
+        {
+            var orgId = GetUserOrganizationId();
+            if (orgId.HasValue)
+                query = query.Where(u => u.IdOrganizacion == null || u.IdOrganizacion == orgId.Value);
+            else
+                query = query.Where(u => u.IdOrganizacion == null);
+        }
+
+        var unidades = await query.OrderBy(u => u.NumeroUnidadAdm).ToListAsync();
+        return Ok(_mapper.Map<List<UnidadAdministrativaResponseDto>>(unidades));
+    }
+
     public async Task<OperationResponse<UnidadAdministrativaResponseDto>> GetByIdAsync(int id)
     {
         var unidad = await _context.TUnidadesAdministrativas
