@@ -86,4 +86,72 @@ public class CategoriaProgramaticaService : BaseService, ICategoriaProgramaticaS
     }
 
     public async Task<OperationResponse<bool>> DeleteAsync(int id) { var e = await _context.TCategoriasProgramaticas.FindAsync(id); return e == null ? NotFound<bool>() : await DeleteAsync(e, _context); }
+
+    public async Task<OperationResponse<int>> UploadCsvAsync(CategoriaProgramaticaBulkUploadDto bulk)
+    {
+        var vigencia = await _context.TVigencias.FirstOrDefaultAsync(v => v.ActivoEjecucion == true);
+        if (vigencia == null) return BadRequest<int>("No hay una vigencia activa en ejecución.");
+
+        var todasLasUas = await _context.TUnidadesAdministrativas.ToListAsync();
+        var uaCache = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
+        var count = 0;
+
+        int? MatchUA(string nombre)
+        {
+            if (string.IsNullOrWhiteSpace(nombre)) return null;
+            var key = nombre.Trim().ToLower();
+            if (uaCache.ContainsKey(key)) return uaCache[key];
+
+            var replaceAccents = new string(key.Normalize(System.Text.NormalizationForm.FormD)
+                .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                .ToArray());
+
+            var match = todasLasUas.FirstOrDefault(u =>
+            {
+                var uName = (u.NombreUnidadAdm ?? "").ToLower();
+                var uNameNoAccent = new string(uName.Normalize(System.Text.NormalizationForm.FormD)
+                    .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    .ToArray());
+                return uNameNoAccent.Contains(replaceAccents) || replaceAccents.Contains(uNameNoAccent);
+            });
+
+            uaCache[key] = match?.IdUnidadAdm;
+            return uaCache[key];
+        }
+
+        var errores = new List<string>();
+        foreach (var item in bulk.Items)
+        {
+            var uaId = MatchUA(item.NombreUnidadAdm);
+            if (!uaId.HasValue)
+            {
+                errores.Add($"{item.Codigo} - {item.Nombre}: UA '{item.NombreUnidadAdm}' no encontrada");
+                continue;
+            }
+
+            var cat = new TCategoriaProgramatica
+            {
+                Codigo = item.Codigo,
+                Nombre = item.Nombre,
+                Naturaleza = string.IsNullOrWhiteSpace(item.Naturaleza) ? null : item.Naturaleza,
+                IdUnidadAdm = uaId.Value,
+                IdVigencia = vigencia.IdVigencia,
+                IdOrganizacion = bulk.IdOrganizacion
+            };
+            PrepareAuditableEntity(cat, isNew: true);
+            _context.TCategoriasProgramaticas.Add(cat);
+            count++;
+        }
+        await _context.SaveChangesAsync();
+
+        if (errores.Any())
+            return OperationResponse<int>.CreateBuilder()
+                .WithSuccess(true)
+                .WithMessage($"Importados: {count} de {bulk.Items.Count}. Faltantes: {string.Join("; ", errores)}")
+                .WithData(count)
+                .WithCode(200)
+                .Build();
+
+        return Ok(count);
+    }
 }

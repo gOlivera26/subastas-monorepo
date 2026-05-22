@@ -15,4 +15,11 @@ public class CategoriaProgramaticaController : BaseController
     [HttpPost] [Authorize] public async Task<IActionResult> Create([FromBody] CategoriaProgramaticaRequestDto dto) => Return(await _s.CreateAsync(dto));
     [HttpPut("{id:int}")] [Authorize] public async Task<IActionResult> Update(int id, [FromBody] CategoriaProgramaticaRequestDto dto) => Return(await _s.UpdateAsync(id, dto));
     [HttpDelete("{id:int}")] [Authorize] public async Task<IActionResult> Delete(int id) => Return(await _s.DeleteAsync(id));
+
+    [HttpPost("upload")]
+    [Authorize]
+    public async Task<IActionResult> Upload([FromBody] CategoriaProgramaticaBulkUploadDto bulk)
+    {
+        return Return(await _s.UploadCsvAsync(bulk));
+    }
 }

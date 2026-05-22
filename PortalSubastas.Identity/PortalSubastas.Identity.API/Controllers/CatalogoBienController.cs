@@ -48,11 +48,7 @@ public class CatalogoBienController : BaseController
         return Return(result);
     }
 
-    [HttpDelete("{id:int}")]
-    [Authorize]
-    public async Task<IActionResult> Delete(int id)
-    {
-        var result = await _service.DeleteAsync(id);
-        return Return(result);
-    }
+    [HttpDelete("{id:int}")] [Authorize] public async Task<IActionResult> Delete(int id) => Return(await _service.DeleteAsync(id));
+
+    [HttpPost("upload")] [Authorize] public async Task<IActionResult> Upload([FromBody] CatalogoBienBulkUploadDto bulk) => Return(await _service.UploadCsvAsync(bulk));
 }

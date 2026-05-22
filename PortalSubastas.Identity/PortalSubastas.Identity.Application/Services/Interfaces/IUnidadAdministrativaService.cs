@@ -6,6 +6,7 @@ namespace PortalSubastas.Identity.Application.Services.Interfaces;
 public interface IUnidadAdministrativaService
 {
     Task<OperationResponse<List<UnidadAdministrativaResponseDto>>> GetByVigenciaAsync(int idVigencia);
+    Task<OperationResponse<List<UnidadAdministrativaResponseDto>>> GetAllAsync();
     Task<OperationResponse<UnidadAdministrativaResponseDto>> GetByIdAsync(int id);
     Task<OperationResponse<UnidadAdministrativaResponseDto>> CreateAsync(UnidadAdministrativaRequestDto dto);
     Task<OperationResponse<UnidadAdministrativaResponseDto>> UpdateAsync(int id, UnidadAdministrativaRequestDto dto);

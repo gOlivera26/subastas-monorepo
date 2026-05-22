@@ -9,6 +9,10 @@ using PortalSubastas.Identity.Application.ResponseDto.CatalogoBien;
 using PortalSubastas.Identity.Application.RequestDto.CatalogoBien;
 using PortalSubastas.Identity.Application.ResponseDto.CategoriaProgramatica;
 using PortalSubastas.Identity.Application.RequestDto.CategoriaProgramatica;
+using PortalSubastas.Identity.Application.ResponseDto.Moneda;
+using PortalSubastas.Identity.Application.RequestDto.Moneda;
+using PortalSubastas.Identity.Application.ResponseDto.SubResponsable;
+using PortalSubastas.Identity.Application.RequestDto.SubResponsable;
 using PortalSubastas.Identity.Application.ResponseDto.ObjetoGasto;
 using PortalSubastas.Identity.Application.RequestDto.ObjetoGasto;
 using PortalSubastas.Identity.Application.RequestDto.Role;
@@ -50,5 +54,11 @@ public class CommonProfile : Profile
             .ForMember(d => d.OrganizacionNombre, o => o.MapFrom(s => s.IdOrganizacionNavigation != null ? s.IdOrganizacionNavigation.Nombre : null))
             .ForMember(d => d.UnidadAdmNombre, o => o.MapFrom(s => s.IdUnidadAdmNavigation != null ? s.IdUnidadAdmNavigation.NombreUnidadAdm : null));
         CreateMap<CategoriaProgramaticaRequestDto, TCategoriaProgramatica>();
+
+        CreateMap<TMoneda, MonedaResponseDto>();
+        CreateMap<MonedaRequestDto, TMoneda>();
+
+        CreateMap<TSubResponsable, SubResponsableResponseDto>();
+        CreateMap<SubResponsableRequestDto, TSubResponsable>();
     }
 }

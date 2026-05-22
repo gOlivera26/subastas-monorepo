@@ -10,4 +10,5 @@ public interface ICategoriaProgramaticaService
     Task<OperationResponse<CategoriaProgramaticaResponseDto>> CreateAsync(CategoriaProgramaticaRequestDto dto);
     Task<OperationResponse<CategoriaProgramaticaResponseDto>> UpdateAsync(int id, CategoriaProgramaticaRequestDto dto);
     Task<OperationResponse<bool>> DeleteAsync(int id);
+    Task<OperationResponse<int>> UploadCsvAsync(CategoriaProgramaticaBulkUploadDto bulk);
 }

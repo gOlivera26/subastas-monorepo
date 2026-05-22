@@ -11,11 +11,11 @@ public partial class TObjetoGasto : IFullAuditableEntity
     public int IdVigencia { get; set; }
     public int? IdOrganizacion { get; set; }
     public bool? ImputaEjecucion { get; set; }
-    public string UsrIng { get; set; }
+    public string? UsrIng { get; set; }
     public DateTime? FecIng { get; set; }
-    public string UsrMod { get; set; }
+    public string? UsrMod { get; set; }
     public DateTime? FecMod { get; set; }
-    public string UsrBaja { get; set; }
+    public string? UsrBaja { get; set; }
     public DateTime? FecBaja { get; set; }
 
     public virtual TObjetoGasto IdObjetoGastoRelNavigation { get; set; }
