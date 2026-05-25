@@ -1,4 +1,4 @@
-﻿namespace PortalSubastas.Identity.Application.Services;
+namespace PortalSubastas.Licitaciones.Application.Services;
 
 public abstract class BaseService
 {
