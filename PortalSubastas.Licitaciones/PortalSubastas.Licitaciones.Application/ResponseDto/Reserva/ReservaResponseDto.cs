@@ -1,5 +1,20 @@
 namespace PortalSubastas.Licitaciones.Application.ResponseDto.Reserva;
 
+public class ReservaDetalleItemDto
+{
+    public int IdReservaDet { get; set; }
+    public int IdReserva { get; set; }
+    public int IdItem { get; set; }
+    public string? NItem { get; set; }
+    public string? NroReserva { get; set; }
+    public decimal Cantidad { get; set; }
+    public decimal Importe { get; set; }
+    public string? NombreUnidadAdm { get; set; }
+    public string? NombreSubResponsable { get; set; }
+    public string? SimboloMoneda { get; set; }
+    public DateTime? FecIng { get; set; }
+}
+
 public class ReservaResponseDto
 {
     public int IdReserva { get; set; }
@@ -17,4 +32,5 @@ public class ReservaResponseDto
     public string? NombreSubResponsable { get; set; }
     public DateTime? FecIng { get; set; }
     public DateTime? FecBaja { get; set; }
+    public List<ReservaDetalleItemDto> Detalles { get; set; } = new();
 }

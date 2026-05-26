@@ -55,4 +55,12 @@ public class ObjetoGastoController : BaseController
         var result = await _service.DeleteAsync(id);
         return Return(result);
     }
+
+    [HttpPost("upload")]
+    [Authorize]
+    public async Task<IActionResult> Upload([FromBody] ObjetoGastoBulkUploadDto bulk)
+    {
+        var result = await _service.UploadCsvAsync(bulk);
+        return Return(result);
+    }
 }
