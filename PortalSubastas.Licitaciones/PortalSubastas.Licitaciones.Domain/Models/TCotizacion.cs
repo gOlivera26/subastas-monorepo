@@ -22,6 +22,7 @@ public partial class TCotizacion : IFullAuditableEntity
     public DateTime? FecBaja { get; set; }
 
     public virtual TCotizacionEspecificacion Especificacion { get; set; }
+    public virtual TUnidadesAdministrativa IdUnidadAdmNavigation { get; set; }
     public virtual ICollection<TCotizacionDetalle> Detalles { get; set; } = new List<TCotizacionDetalle>();
     public virtual ICollection<TCotizacionRenglon> Renglones { get; set; } = new List<TCotizacionRenglon>();
     public virtual ICollection<TCotizacionProveedor> Proveedores { get; set; } = new List<TCotizacionProveedor>();

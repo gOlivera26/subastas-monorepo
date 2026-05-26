@@ -84,6 +84,15 @@ public class CotizacionController : BaseController
         return Return(result);
     }
 
+    // --- Búsqueda con filtros ---
+    [HttpGet("buscar")]
+    [ProducesResponseType(typeof(OperationResponse<List<SubastaDashboardDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Buscar([FromQuery] int? idVigencia, [FromQuery] int? idEstado, [FromQuery] string? nro = null, [FromQuery] string? expte = null, [FromQuery] DateTime? fechaDesde = null)
+    {
+        var result = await _cotizacionService.BuscarAsync(idVigencia, idEstado, nro, expte, fechaDesde);
+        return Return(result);
+    }
+
     // --- Transiciones de estado ---
     [HttpPost("{id:int}/notificar")]
     [ProducesResponseType(typeof(OperationResponse<CotizacionResponseDto>), StatusCodes.Status200OK)]
@@ -98,6 +107,22 @@ public class CotizacionController : BaseController
     public async Task<IActionResult> Finalizar(int id)
     {
         var result = await _cotizacionService.FinalizarAsync(id);
+        return Return(result);
+    }
+
+    [HttpPost("{id:int}/desistir")]
+    [ProducesResponseType(typeof(OperationResponse<CotizacionResponseDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Desistir(int id)
+    {
+        var result = await _cotizacionService.DesistirAsync(id);
+        return Return(result);
+    }
+
+    [HttpPost("{id:int}/prorrogar")]
+    [ProducesResponseType(typeof(OperationResponse<CotizacionResponseDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Prorrogar(int id, [FromBody] ProrrogaRequestDto dto)
+    {
+        var result = await _cotizacionService.ProrrogarAsync(id, dto.Minutos);
         return Return(result);
     }
 }

@@ -10,11 +10,12 @@ public class CotizacionRequestDto
 
     public CotizacionEspecificacionRequestDto Especificacion { get; set; }
     public List<CotizacionDetalleRequestDto> Detalles { get; set; } = new();
+    public List<CotizacionRenglonRequestDto> Renglones { get; set; } = new();
 }
 
 public class CotizacionEspecificacionRequestDto
 {
-    public string NroExpediente { get; set; }
+    public string? NroExpediente { get; set; }
     public DateTime? FechaInicioSubasta { get; set; }
     public DateTime? FechaFinalizacionSubasta { get; set; }
     public DateTime? FechaLimiteConsultas { get; set; }
@@ -22,7 +23,7 @@ public class CotizacionEspecificacionRequestDto
     public int? CriterioAdjudicacion { get; set; }
     public bool PermiteProrroga { get; set; }
     public int? ProrrogaMinutos { get; set; }
-    public string Redeterminacion { get; set; }
+    public string? Redeterminacion { get; set; }
 }
 
 public class CotizacionDetalleRequestDto
@@ -32,4 +33,15 @@ public class CotizacionDetalleRequestDto
     public int? IdRenglon { get; set; }
     public decimal Cantidad { get; set; }
     public decimal ImporteBase { get; set; }
+}
+
+public class CotizacionRenglonRequestDto
+{
+    public int NumeroRenglon { get; set; }
+    public string Descripcion { get; set; }
+}
+
+public class ProrrogaRequestDto
+{
+    public int Minutos { get; set; }
 }

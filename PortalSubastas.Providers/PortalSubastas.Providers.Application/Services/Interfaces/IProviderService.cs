@@ -3,6 +3,7 @@ namespace PortalSubastas.Providers.Application.Services.Interfaces;
 public interface IProviderService
 {
     Task<OperationResponse<ProviderResponseDto>> VerifyCuitAsync(string cuit);
+    Task<OperationResponse<ProviderResponseDto>> GetByIdAsync(int id);
     Task<OperationResponse<ProviderListResponseDto>> GetProvidersAsync(int page, int pageSize, string? searchTerm, string? sortBy = null, string? sortDirection = null);
     Task<OperationResponse<ProviderResponseDto>> CreateProviderAsync(CreateProviderDto dto);
     Task<OperationResponse<ProviderResponseDto>> UpdateProviderAsync(UpdateProviderDto dto);

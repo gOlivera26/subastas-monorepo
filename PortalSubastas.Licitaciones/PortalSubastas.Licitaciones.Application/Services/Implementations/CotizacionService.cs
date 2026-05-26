@@ -20,7 +20,7 @@ public class CotizacionService : BaseService, ICotizacionService
     {
         var query = _context.TCotizaciones
             .Include(c => c.Especificacion)
-            .Include(c => c.Detalles)
+            .Include(c => c.IdUnidadAdmNavigation)
             .AsQueryable();
 
         if (idVigencia.HasValue)
@@ -42,11 +42,62 @@ public class CotizacionService : BaseService, ICotizacionService
         var entity = await _context.TCotizaciones
             .Include(c => c.Especificacion)
             .Include(c => c.Detalles)
+            .Include(c => c.IdUnidadAdmNavigation)
             .FirstOrDefaultAsync(c => c.IdCotizacion == id);
 
         if (entity == null) return NotFound<CotizacionResponseDto>();
 
-        return Ok(_mapper.Map<CotizacionResponseDto>(entity));
+        var dto = _mapper.Map<CotizacionResponseDto>(entity);
+
+        dto.Tipo = entity.IdTipoContratacion switch { 7 => "Subasta Inversa", 9 => "Subasta Directa", 13 => "Subasta Inversa Monto Fijo", 15 => "Subasta Inversa SEEC", _ => "Subasta" };
+        dto.Estado = GetEstadoNombre(entity.IdEstado);
+        dto.Modalidad = entity.Especificacion?.Redeterminacion switch { "1" => "Pública", "0" => "Privada", "2" => "Cerrada", _ => "No definida" };
+
+        // Load Renglones separately (table may not exist yet)
+        try
+        {
+            var renglones = await _context.TCotizacionRenglones
+                .Where(r => r.IdCotizacion == id)
+                .ToListAsync();
+            dto.Renglones = _mapper.Map<List<CotizacionRenglonResponseDto>>(renglones);
+        }
+        catch { dto.Renglones = new(); }
+
+        // Load Proveedores separately (table may not exist yet)
+        try
+        {
+            var proveedores = await _context.TCotizacionProveedores
+                .Where(p => p.IdCotizacion == id && p.FecBaja == null)
+                .ToListAsync();
+            dto.Proveedores = _mapper.Map<List<CotizacionProveedorResponseDto>>(proveedores);
+        }
+        catch { dto.Proveedores = new(); }
+
+        // Populate NItem and NroReserva manually for each detail item
+        var itemIds = dto.Detalles.Select(d => d.IdItem).ToList();
+        var itemsMap = await _context.TCatalogosBiens
+            .Where(i => itemIds.Contains(i.IdItem))
+            .ToDictionaryAsync(i => i.IdItem, i => i.NItem);
+
+        var resDetIds = dto.Detalles.Select(d => d.IdReservaDetalle).ToList();
+        var resMap = await _context.TReservaDetalles
+            .Include(rd => rd.IdReservaNavigation)
+            .Where(rd => resDetIds.Contains(rd.IdReservaDet))
+            .ToDictionaryAsync(rd => rd.IdReservaDet, rd => rd.IdReservaNavigation?.NroReserva);
+
+        foreach (var d in dto.Detalles)
+        {
+            if (itemsMap.TryGetValue(d.IdItem, out var nitem))
+            {
+                d.NItem = nitem;
+            }
+            if (resMap.TryGetValue(d.IdReservaDetalle, out var nro))
+            {
+                d.NroReserva = nro;
+            }
+        }
+
+        return Ok(dto);
     }
 
     public async Task<OperationResponse<CotizacionResponseDto>> CreateAsync(CotizacionRequestDto dto)
@@ -55,6 +106,8 @@ public class CotizacionService : BaseService, ICotizacionService
         
         // Logica legacy de inicialización
         entity.IdEstado = 4; // Generado
+        entity.IdOrganizacion = GetUserOrganizationId() ?? dto.IdOrganizacion;
+        if (entity.IdOrganizacion == 0) entity.IdOrganizacion = 1; // fallback
         
         // Auto-numérico NRO_COTIZACION (simplificado para MVP, se debería hacer transaccional)
         var vigencia = await _context.TVigencias.FindAsync(dto.IdVigencia);
@@ -82,6 +135,26 @@ public class CotizacionService : BaseService, ICotizacionService
 
         foreach(var det in entity.Detalles)
             PrepareAuditableEntity(det, isNew: true);
+
+        foreach(var ren in entity.Renglones)
+            PrepareAuditableEntity(ren, isNew: true);
+
+        // Link detalle items to renglones using NumeroRenglon from the request.
+        // The frontend sends ren.id as both numeroRenglon and idRenglon,
+        // but the real DB id_renglon is auto-generated. Match by NumeroRenglon.
+        if (entity.Renglones.Any())
+        {
+            var renglonByNro = entity.Renglones.ToDictionary(r => r.NumeroRenglon);
+            foreach (var det in entity.Detalles.Where(d => d.IdRenglon.HasValue))
+            {
+                var nroRenglon = det.IdRenglon.Value;
+                if (renglonByNro.TryGetValue(nroRenglon, out var ren))
+                {
+                    det.IdRenglonNavigation = ren;
+                    det.IdRenglon = null; // EF Core will resolve from navigation
+                }
+            }
+        }
 
         _context.TCotizaciones.Add(entity);
         await _context.SaveChangesAsync();
@@ -160,6 +233,24 @@ public class CotizacionService : BaseService, ICotizacionService
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
+    public async Task<OperationResponse<CotizacionResponseDto>> DesistirAsync(int id)
+    {
+        var entity = await _context.TCotizaciones
+            .Include(c => c.Especificacion)
+            .FirstOrDefaultAsync(c => c.IdCotizacion == id);
+
+        if (entity == null) return NotFound<CotizacionResponseDto>();
+
+        if (entity.IdEstado != 39 && entity.IdEstado != 40)
+            return BadRequest<CotizacionResponseDto>("Solo se puede desistir en estado EnviadaPendiente o Finalizada.");
+
+        entity.IdEstado = 47; // Desistir
+        PrepareAuditableEntity(entity, isNew: false);
+
+        await _context.SaveChangesAsync();
+        return Ok(_mapper.Map<CotizacionResponseDto>(entity));
+    }
+
     // --- Endpoints Dashboard ---
     private IQueryable<TCotizacion> GetDashboardBaseQuery(int? idVigencia)
     {
@@ -213,15 +304,68 @@ public class CotizacionService : BaseService, ICotizacionService
         return Ok(MapToDashboard(data));
     }
 
+    public async Task<OperationResponse<List<SubastaDashboardDto>>> BuscarAsync(int? idVigencia, int? idEstado, string nro, string expte, DateTime? fechaDesde)
+    {
+        var query = _context.TCotizaciones
+            .Include(c => c.Especificacion)
+            .Include(c => c.IdUnidadAdmNavigation)
+            .AsQueryable();
+
+        if (idVigencia.HasValue)
+            query = query.Where(c => c.IdVigencia == idVigencia.Value);
+
+        if (idEstado.HasValue)
+            query = query.Where(c => c.IdEstado == idEstado.Value);
+
+        if (!string.IsNullOrWhiteSpace(nro))
+            query = query.Where(c => c.NroCotizacion.Contains(nro));
+
+        if (!string.IsNullOrWhiteSpace(expte))
+            query = query.Where(c => c.Especificacion.NroExpediente.Contains(expte) || c.Observacion.Contains(expte));
+
+        if (fechaDesde.HasValue)
+            query = query.Where(c => c.Especificacion.FechaInicioSubasta >= fechaDesde.Value);
+
+        var data = await query.OrderByDescending(c => c.IdCotizacion).Take(100).ToListAsync();
+        return Ok(MapToDashboard(data));
+    }
+
+    public async Task<OperationResponse<CotizacionResponseDto>> ProrrogarAsync(int id, int minutos)
+    {
+        var entity = await _context.TCotizaciones
+            .Include(c => c.Especificacion)
+            .FirstOrDefaultAsync(c => c.IdCotizacion == id);
+
+        if (entity == null || entity.Especificacion == null) return NotFound<CotizacionResponseDto>();
+        
+        entity.Especificacion.FechaFinalizacionSubasta = entity.Especificacion.FechaFinalizacionSubasta?.AddMinutes(minutos);
+        PrepareAuditableEntity(entity.Especificacion, isNew: false);
+        await _context.SaveChangesAsync();
+
+        return Ok(_mapper.Map<CotizacionResponseDto>(entity));
+    }
+
+    private string GetEstadoNombre(int idEstado) => idEstado switch
+    {
+        4 => "Generado",
+        20 => "Anulado",
+        39 => "Enviada Pendiente",
+        40 => "Finalizada",
+        47 => "Desistida",
+        _ => "Desconocido"
+    };
+
     private List<SubastaDashboardDto> MapToDashboard(List<TCotizacion> data)
     {
         return data.Select(c => new SubastaDashboardDto
         {
             IdCotizacion = c.IdCotizacion,
+            IdEstado = c.IdEstado,
             NroCotizacion = c.NroCotizacion,
-            Tipo = c.IdTipoContratacion == 7 ? "Subasta Inversa" : "Subasta Directa", // Simulado
-            Estado = c.IdEstado == 39 ? "Publicada" : (c.IdEstado == 4 ? "Generado" : "Anulada"),
+            Tipo = c.IdTipoContratacion == 7 ? "Subasta Inversa" : "Subasta Directa",
+            Estado = GetEstadoNombre(c.IdEstado),
             Titulo = c.Observacion ?? "Subasta " + c.NroCotizacion,
+            UnidadAdm = c.IdUnidadAdmNavigation?.NombreUnidadAdm ?? "",
             FechaInicio = c.Especificacion?.FechaInicioSubasta,
             FechaFin = c.Especificacion?.FechaFinalizacionSubasta
         }).ToList();

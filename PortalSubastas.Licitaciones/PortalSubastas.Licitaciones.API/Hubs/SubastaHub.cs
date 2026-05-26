@@ -40,6 +40,36 @@ public class SubastaHub : Hub
         return true;
     }
 
+    // --- Mensajería en tiempo real ---
+    public async Task UnirseMensajes(int idCotizacion)
+    {
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"chat_{idCotizacion}");
+    }
+
+    public async Task SalirMensajes(int idCotizacion)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"chat_{idCotizacion}");
+    }
+
+    public async Task EnviarMensaje(int idCotizacion, string contenido)
+    {
+        var usuario = Context.User?.Identity?.Name ?? "Anónimo";
+        var mensaje = new
+        {
+            usuario,
+            contenido,
+            fecIng = DateTime.Now
+        };
+
+        await Clients.Group($"chat_{idCotizacion}").SendAsync("MensajeRecibido", mensaje);
+    }
+
+    public async Task Escribiendo(int idCotizacion)
+    {
+        var usuario = Context.User?.Identity?.Name ?? "Anónimo";
+        await Clients.OthersInGroup($"chat_{idCotizacion}").SendAsync("UsuarioEscribiendo", usuario);
+    }
+
     public static void CerrarSubasta(int idCotizacion)
     {
         _subastasCerradas.Add(idCotizacion);

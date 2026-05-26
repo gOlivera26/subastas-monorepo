@@ -17,5 +17,9 @@ public class CotizacionProfile : Profile
 
         CreateMap<TCotizacionDetalle, CotizacionDetalleResponseDto>();
         CreateMap<CotizacionDetalleRequestDto, TCotizacionDetalle>();
+
+        CreateMap<TCotizacionRenglon, CotizacionRenglonResponseDto>();
+        CreateMap<CotizacionRenglonRequestDto, TCotizacionRenglon>();
+        CreateMap<TCotizacionProveedor, CotizacionProveedorResponseDto>();
     }
 }
