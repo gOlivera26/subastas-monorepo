@@ -84,15 +84,25 @@ public static class ServicesConfig
                 ValidateAudience = true,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
-                ValidIssuer = configuration["Jwt:Issuer"] ?? "PortalSubastas.Licitaciones",
-                ValidAudience = configuration["Jwt:Audience"] ?? "PortalSubastas.Licitaciones",
+                ValidIssuer = configuration["Jwt:Issuer"] ?? "PortalSubastas.Identity",
+                ValidAudience = configuration["Jwt:Audience"] ?? "PortalSubastas.Frontend",
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(
-                    configuration["Jwt:Key"] ?? "YourSecretKeyHere12345")),
+                    configuration["Jwt:SecretKey"] ?? "TuSuperSecretoSuperLargoParaElPortalDeSubastasInnovaNow2026!")),
                 ClockSkew = TimeSpan.Zero,
             };
 
             options.Events = new JwtBearerEvents()
             {
+                OnMessageReceived = context =>
+                {
+                    var accessToken = context.Request.Query["access_token"];
+                    var path = context.HttpContext.Request.Path;
+                    if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/signalr"))
+                    {
+                        context.Token = accessToken;
+                    }
+                    return Task.CompletedTask;
+                },
                 OnChallenge = context =>
                 {
                     context.HandleResponse();
@@ -160,6 +170,8 @@ public static class ServicesConfig
         services.AddScoped<IMonedaService, MonedaService>();
         services.AddScoped<ICategoriaProgramaticaService, CategoriaProgramaticaService>();
         services.AddScoped<IObjetoGastoService, ObjetoGastoService>();
+        services.AddScoped<ICotizacionService, CotizacionService>();
+        services.AddScoped<IGanadorService, GanadorService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)

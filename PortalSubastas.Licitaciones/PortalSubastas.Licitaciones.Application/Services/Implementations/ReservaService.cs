@@ -29,12 +29,19 @@ public class ReservaService : BaseService, IReservaService
             .Include(r => r.IdEstadoNavigation)
             .Include(r => r.IdUnidadAdmNavigation)
             .Include(r => r.IdSubResponsableNavigation)
+            .Include(r => r.TReservaDetalles.Where(d => d.FecBaja == null))
+                .ThenInclude(d => d.IdItemNavigation)
+            .Include(r => r.TReservaDetalles.Where(d => d.FecBaja == null))
+                .ThenInclude(d => d.IdMonedaNavigation)
             .AsQueryable();
 
         if (filtros != null)
         {
             if (filtros.IdUnidadAdm.HasValue)
                 query = query.Where(r => r.IdUnidadAdm == filtros.IdUnidadAdm.Value);
+
+            if (filtros.IdSubResponsable.HasValue)
+                query = query.Where(r => r.IdSubResponsable == filtros.IdSubResponsable.Value);
 
             if (filtros.IdVigencia.HasValue)
                 query = query.Where(r => r.IdVigencia == filtros.IdVigencia.Value);
@@ -47,7 +54,29 @@ public class ReservaService : BaseService, IReservaService
             .OrderByDescending(r => r.IdReserva)
             .ToListAsync();
 
-        return Ok(_mapper.Map<List<ReservaResponseDto>>(reservas));
+        var dtos = _mapper.Map<List<ReservaResponseDto>>(reservas);
+        foreach (var dto in dtos)
+        {
+            var reserva = reservas.First(r => r.IdReserva == dto.IdReserva);
+            dto.Detalles = reserva.TReservaDetalles
+                .Where(d => d.FecBaja == null)
+                .Select(d => new ReservaDetalleItemDto
+                {
+                    IdReservaDet = d.IdReservaDet,
+                    IdReserva = d.IdReserva,
+                    IdItem = d.IdItem,
+                    NItem = d.IdItemNavigation?.NItem,
+                    NroReserva = reserva.NroReserva,
+                    Cantidad = d.Cantidad ?? 0,
+                    Importe = d.Importe ?? 0,
+                    NombreUnidadAdm = reserva.IdUnidadAdmNavigation?.NombreUnidadAdm,
+                    NombreSubResponsable = reserva.IdSubResponsableNavigation?.Nombre,
+                    SimboloMoneda = d.IdMonedaNavigation?.Simbolo,
+                    FecIng = d.FecIng
+                }).ToList();
+        }
+
+        return Ok(dtos);
     }
 
     public async Task<OperationResponse<ReservaResponseDto>> GetByIdAsync(int id)

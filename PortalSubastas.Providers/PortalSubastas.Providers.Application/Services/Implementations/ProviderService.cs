@@ -28,6 +28,14 @@ public class ProviderService : BaseService, IProviderService
         return Ok(_mapper.Map<ProviderResponseDto>(proveedor));
     }
 
+    public async Task<OperationResponse<ProviderResponseDto>> GetByIdAsync(int id)
+    {
+        var proveedor = await _context.TProveedores.FirstOrDefaultAsync(p => p.Id == id);
+        if (proveedor == null)
+            return NotFound<ProviderResponseDto>();
+        return Ok(_mapper.Map<ProviderResponseDto>(proveedor));
+    }
+
     public async Task<OperationResponse<ProviderListResponseDto>> GetProvidersAsync(int page, int pageSize, string? searchTerm, string? sortBy = null, string? sortDirection = null)
     {
         var query = _context.TProveedores.AsQueryable();

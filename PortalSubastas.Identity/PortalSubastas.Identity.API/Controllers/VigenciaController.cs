@@ -6,7 +6,6 @@ namespace PortalSubastas.Identity.API.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[RequireModule("clasificadores.vigencias")]
 public class VigenciaController : BaseController
 {
     private readonly IVigenciaService _vigenciaService;

@@ -10,4 +10,5 @@ public interface IObjetoGastoService
     Task<OperationResponse<ObjetoGastoResponseDto>> CreateAsync(ObjetoGastoRequestDto dto);
     Task<OperationResponse<ObjetoGastoResponseDto>> UpdateAsync(int id, ObjetoGastoRequestDto dto);
     Task<OperationResponse<bool>> DeleteAsync(int id);
+    Task<OperationResponse<int>> UploadCsvAsync(ObjetoGastoBulkUploadDto bulk);
 }

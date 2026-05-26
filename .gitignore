@@ -1,6 +1,13 @@
 **/appsettings.json
 **/appsettings.Development.json
+!PortalSubastas.Gateway/**/appsettings.json
 !**/appsettings.Example.json
+
+## IGNORAR SCRIPTS, SQL, DOCKER
+*.ps1
+**/sql/
+Dockerfile*
+docker-compose*
 
 ## IGNORAR ARCHIVOS DE USUARIO Y TEMPORALES DE VS
 .vs/

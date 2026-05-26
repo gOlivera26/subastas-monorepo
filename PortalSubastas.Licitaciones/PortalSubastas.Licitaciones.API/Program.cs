@@ -1,4 +1,5 @@
 using PortalSubastas.Licitaciones.API.Config;
+using PortalSubastas.Licitaciones.API.Hubs;
 using PortalSubastas.Licitaciones.API.Middlewares;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Hosting;
@@ -21,6 +22,7 @@ builder.Services.AddMassTransit(x =>
 builder.Services.AddConfig(builder.Configuration);
 builder.Services.AddOpenTelemetryTracing(builder.Configuration);
 
+builder.Services.AddSignalR();
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
@@ -43,6 +45,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<SubastaHub>("/signalr/subastas");
 
 app.MapHealthChecks("/health");
 

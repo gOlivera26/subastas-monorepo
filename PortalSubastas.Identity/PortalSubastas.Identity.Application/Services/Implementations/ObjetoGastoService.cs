@@ -77,4 +77,56 @@ public class ObjetoGastoService : BaseService, IObjetoGastoService
         if (entity == null) return NotFound<bool>();
         return await DeleteAsync(entity, _context);
     }
+
+    public async Task<OperationResponse<int>> UploadCsvAsync(ObjetoGastoBulkUploadDto bulk)
+    {
+        var vigencia = await _context.TVigencias.FirstOrDefaultAsync(v => v.ActivoEjecucion == true);
+        if (vigencia == null) return BadRequest<int>("No hay una vigencia activa en ejecución.");
+
+        var existingNumeros = await _context.TObjetosGasto.Select(o => o.NumeroObjeto).ToListAsync();
+        var usedNumeros = new HashSet<string>(existingNumeros);
+
+        var count = 0;
+        var entities = new List<TObjetoGasto>();
+
+        TObjetoGasto CreateEntity(ObjetoGastoBulkItemDto item)
+        {
+            return new TObjetoGasto
+            {
+                IdObjetoGasto = item.IdObjetoGasto > 0 ? item.IdObjetoGasto : 0,
+                IdObjetoGastoRel = item.IdObjetoGastoRel,
+                NumeroObjeto = item.NumeroObjeto,
+                NombreObjeto = item.NombreObjeto,
+                ImputaEjecucion = item.ImputaEjecucion ?? false,
+                IdVigencia = vigencia.IdVigencia,
+                IdOrganizacion = bulk.IdOrganizacion,
+                UsrIng = "UPLOAD"
+            };
+        }
+
+        foreach (var item in bulk.Items.Where(i => i.IdObjetoGastoRel == null || i.IdObjetoGastoRel == 0))
+        {
+            if (!usedNumeros.Add(item.NumeroObjeto)) continue;
+            entities.Add(CreateEntity(item));
+            count++;
+        }
+
+        await _context.TObjetosGasto.AddRangeAsync(entities);
+        await _context.SaveChangesAsync();
+
+        foreach (var item in bulk.Items.Where(i => i.IdObjetoGastoRel != null && i.IdObjetoGastoRel > 0))
+        {
+            if (!usedNumeros.Add(item.NumeroObjeto)) continue;
+            entities.Add(CreateEntity(item));
+            count++;
+        }
+
+        if (entities.Count > 0)
+        {
+            await _context.TObjetosGasto.AddRangeAsync(entities);
+            await _context.SaveChangesAsync();
+        }
+
+        return Ok(count);
+    }
 }
