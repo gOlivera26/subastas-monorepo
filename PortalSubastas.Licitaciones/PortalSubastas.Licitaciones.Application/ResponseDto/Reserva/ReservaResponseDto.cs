@@ -12,6 +12,7 @@ public class ReservaDetalleItemDto
     public string? NombreUnidadAdm { get; set; }
     public string? NombreSubResponsable { get; set; }
     public string? SimboloMoneda { get; set; }
+    public decimal CantidadRestante { get; set; }
     public DateTime? FecIng { get; set; }
 }
 

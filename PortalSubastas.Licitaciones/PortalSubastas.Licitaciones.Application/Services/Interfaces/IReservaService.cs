@@ -14,4 +14,5 @@ public interface IReservaService
     Task<OperationResponse<ReservaResponseDto>> AutorizarAsync(int id, AutorizarReservaDto dto);
     Task<OperationResponse<ReservaResponseDto>> ClonarAsync(int id);
     Task<OperationResponse<List<EstadoDto>>> GetEstadosAsync();
+
 }

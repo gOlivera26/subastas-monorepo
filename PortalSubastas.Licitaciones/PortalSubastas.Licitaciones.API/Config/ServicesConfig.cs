@@ -172,6 +172,7 @@ public static class ServicesConfig
         services.AddScoped<IObjetoGastoService, ObjetoGastoService>();
         services.AddScoped<ICotizacionService, CotizacionService>();
         services.AddScoped<IGanadorService, GanadorService>();
+        services.AddScoped<IGarantiaService, GarantiaService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)

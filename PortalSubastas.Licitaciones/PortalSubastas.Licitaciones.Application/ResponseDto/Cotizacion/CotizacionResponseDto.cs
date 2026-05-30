@@ -44,6 +44,7 @@ public class CotizacionDetalleResponseDto
     public int? IdRenglon { get; set; }
     public decimal Cantidad { get; set; }
     public decimal ImporteBase { get; set; }
+    public decimal? ImporteMinimo { get; set; }
 }
 
 public class CotizacionRenglonResponseDto
@@ -65,10 +66,23 @@ public class SubastaDashboardDto
     public int IdCotizacion { get; set; }
     public int IdEstado { get; set; }
     public string NroCotizacion { get; set; }
+    public int IdTipoContratacion { get; set; }
+    public string TipoContratacion { get; set; }
     public string Tipo { get; set; }
     public string Estado { get; set; }
     public string Titulo { get; set; }
     public string UnidadAdm { get; set; }
+    public string ObjetoContratacion { get; set; }
+    public int? CriterioAdjudicacion { get; set; } // 0 = Item, 1 = Renglon
+    public string Redeterminacion { get; set; } // 1=Publica, 0=Privada, 2=Cerrada
     public DateTime? FechaInicio { get; set; }
     public DateTime? FechaFin { get; set; }
+    public DateTime? FechaConsulta { get; set; }
+    public DateTime? FechaFinSubasta { get; set; }
+    public bool VerInformeFinal { get; set; }
+    public bool MostrarBotonMejora { get; set; }
+    public string TipoSobre { get; set; }
+    public DateTime? FechaLimiteImpugnar { get; set; }
+    public DateTime? FechaAperturaSobreUno { get; set; }
+    public DateTime? FechaAperturaSobreDos { get; set; }
 }

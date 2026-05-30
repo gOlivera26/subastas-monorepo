@@ -58,4 +58,13 @@ public class ReservaDetalleController : ControllerBase
         var result = await _detalleService.DeleteAsync(id);
         return result.Success == true ? Ok(result) : BadRequest(result);
     }
+
+    [HttpPost("{id}/desautorizar")]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Desautorizar(int id)
+    {
+        var result = await _detalleService.DesautorizarAsync(id);
+        return result.Success == true ? Ok(result) : BadRequest(result);
+    }
+
 }

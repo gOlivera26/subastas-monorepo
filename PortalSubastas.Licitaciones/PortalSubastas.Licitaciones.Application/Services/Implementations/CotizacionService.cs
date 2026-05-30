@@ -304,18 +304,24 @@ public class CotizacionService : BaseService, ICotizacionService
         return Ok(MapToDashboard(data));
     }
 
-    public async Task<OperationResponse<List<SubastaDashboardDto>>> BuscarAsync(int? idVigencia, int? idEstado, string nro, string expte, DateTime? fechaDesde)
+    public async Task<OperationResponse<List<SubastaDashboardDto>>> BuscarAsync(
+        int? idVigencia, int? idEstado, int? idTipoContratacion,
+        string? nro, string? expte, DateTime? fechaDesde, DateTime? fechaHasta)
     {
         var query = _context.TCotizaciones
             .Include(c => c.Especificacion)
             .Include(c => c.IdUnidadAdmNavigation)
             .AsQueryable();
 
+        // Filtros básicos
         if (idVigencia.HasValue)
             query = query.Where(c => c.IdVigencia == idVigencia.Value);
 
         if (idEstado.HasValue)
             query = query.Where(c => c.IdEstado == idEstado.Value);
+
+        if (idTipoContratacion.HasValue)
+            query = query.Where(c => c.IdTipoContratacion == idTipoContratacion.Value);
 
         if (!string.IsNullOrWhiteSpace(nro))
             query = query.Where(c => c.NroCotizacion.Contains(nro));
@@ -325,6 +331,29 @@ public class CotizacionService : BaseService, ICotizacionService
 
         if (fechaDesde.HasValue)
             query = query.Where(c => c.Especificacion.FechaInicioSubasta >= fechaDesde.Value);
+
+        if (fechaHasta.HasValue)
+            query = query.Where(c => c.Especificacion.FechaFinalizacionSubasta <= fechaHasta.Value);
+
+        // Extraer contexto del usuario desde el JWT
+        var esAdmin = IsSuperAdmin();
+        var proveedorId = GetUserProveedorId();
+
+        // Lógica de visibilidad (replica del sistema viejo)
+        // Admin ve todo. Proveedor solo ve:
+        // - Subastas Públicas (Redeterminacion = "1")
+        // - Subastas Privadas (Redeterminacion = "0") donde está invitado
+        // - NO ve Cerradas (Redeterminacion = "2") a menos que esté invitado
+        if (!esAdmin && proveedorId.HasValue)
+        {
+            query = query.Where(c =>
+                c.Especificacion.Redeterminacion == "1" // Pública: todos ven
+                || (c.Especificacion.Redeterminacion == "0" // Privada: solo invitados
+                    && c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.FecBaja == null))
+                || (c.Especificacion.Redeterminacion == "2" // Cerrada: solo invitados
+                    && c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.FecBaja == null))
+            );
+        }
 
         var data = await query.OrderByDescending(c => c.IdCotizacion).Take(100).ToListAsync();
         return Ok(MapToDashboard(data));
@@ -355,6 +384,15 @@ public class CotizacionService : BaseService, ICotizacionService
         _ => "Desconocido"
     };
 
+    private string GetTipoContratacionNombre(int idTipo) => idTipo switch
+    {
+        7 => "Subasta Electrónica Inversa",
+        9 => "Subasta Electrónica Directa",
+        13 => "Subasta Inversa Monto Fijo",
+        15 => "Subasta Inversa SEEC",
+        _ => "Subasta"
+    };
+
     private List<SubastaDashboardDto> MapToDashboard(List<TCotizacion> data)
     {
         return data.Select(c => new SubastaDashboardDto
@@ -362,12 +400,26 @@ public class CotizacionService : BaseService, ICotizacionService
             IdCotizacion = c.IdCotizacion,
             IdEstado = c.IdEstado,
             NroCotizacion = c.NroCotizacion,
+            IdTipoContratacion = c.IdTipoContratacion,
+            TipoContratacion = GetTipoContratacionNombre(c.IdTipoContratacion),
             Tipo = c.IdTipoContratacion == 7 ? "Subasta Inversa" : "Subasta Directa",
             Estado = GetEstadoNombre(c.IdEstado),
             Titulo = c.Observacion ?? "Subasta " + c.NroCotizacion,
             UnidadAdm = c.IdUnidadAdmNavigation?.NombreUnidadAdm ?? "",
+            ObjetoContratacion = c.Observacion ?? "",
+            CriterioAdjudicacion = c.Especificacion?.CriterioAdjudicacion,
+            Redeterminacion = c.Especificacion?.Redeterminacion,
             FechaInicio = c.Especificacion?.FechaInicioSubasta,
-            FechaFin = c.Especificacion?.FechaFinalizacionSubasta
+            FechaFin = c.Especificacion?.FechaFinalizacionSubasta,
+            FechaConsulta = c.Especificacion?.FechaLimiteConsultas,
+            FechaFinSubasta = c.Especificacion?.FechaFinalizacionSubasta,
+            VerInformeFinal = c.IdEstado == 40, // Finalizada
+
+            MostrarBotonMejora = c.Especificacion?.MostrarBotonMejora ?? false,
+            TipoSobre = c.Especificacion?.TipoSobre,
+            FechaLimiteImpugnar = c.Especificacion?.FechaLimiteImpugnar,
+            FechaAperturaSobreUno = c.Especificacion?.FechaAperturaSobreUno,
+            FechaAperturaSobreDos = c.Especificacion?.FechaAperturaSobreDos
         }).ToList();
     }
 }

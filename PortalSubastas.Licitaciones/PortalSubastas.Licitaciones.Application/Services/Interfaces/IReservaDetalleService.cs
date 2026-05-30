@@ -10,4 +10,5 @@ public interface IReservaDetalleService
     Task<OperationResponse<ReservaDetalleResponseDto>> CreateAsync(ReservaDetalleRequestDto dto);
     Task<OperationResponse<ReservaDetalleResponseDto>> UpdateAsync(int id, ReservaDetalleRequestDto dto);
     Task<OperationResponse<bool>> DeleteAsync(int id);
+    Task<OperationResponse<bool>> DesautorizarAsync(int id);
 }

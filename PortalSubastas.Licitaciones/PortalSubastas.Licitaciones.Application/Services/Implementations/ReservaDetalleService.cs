@@ -122,4 +122,20 @@ public class ReservaDetalleService : BaseService, IReservaDetalleService
 
         return result;
     }
+
+    public async Task<OperationResponse<bool>> DesautorizarAsync(int id)
+    {
+        var detalle = await _context.TReservaDetalles.FindAsync(id);
+        if (detalle == null) return NotFound<bool>();
+
+        detalle.IdEstado = 7; // 7 = Anulado
+        PrepareAuditableEntity(detalle, isNew: false);
+
+        await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "DESAUTORIZAR_ITEM", "LICITACIONES",
+            new { Mensaje = $"Se desautorizó/anuló el ítem ID {id} desde la creación de subasta." });
+
+        return Ok(true);
+    }
 }

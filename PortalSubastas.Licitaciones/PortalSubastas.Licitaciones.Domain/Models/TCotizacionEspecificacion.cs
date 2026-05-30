@@ -19,6 +19,12 @@ public partial class TCotizacionEspecificacion : IFullAuditableEntity
     public int? ProrrogaMinutos { get; set; }
     public string Redeterminacion { get; set; } // 1=Publica, 0=Privada, 2=Cerrada
 
+    public string TipoSobre { get; set; }
+    public DateTime? FechaLimiteImpugnar { get; set; }
+    public DateTime? FechaAperturaSobreUno { get; set; }
+    public DateTime? FechaAperturaSobreDos { get; set; }
+    public bool MostrarBotonMejora { get; set; }
+
     public string UsrIng { get; set; }
     public DateTime? FecIng { get; set; }
     public string UsrMod { get; set; }

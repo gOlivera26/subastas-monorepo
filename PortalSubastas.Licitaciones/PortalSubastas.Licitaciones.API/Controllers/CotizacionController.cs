@@ -87,9 +87,16 @@ public class CotizacionController : BaseController
     // --- Búsqueda con filtros ---
     [HttpGet("buscar")]
     [ProducesResponseType(typeof(OperationResponse<List<SubastaDashboardDto>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> Buscar([FromQuery] int? idVigencia, [FromQuery] int? idEstado, [FromQuery] string? nro = null, [FromQuery] string? expte = null, [FromQuery] DateTime? fechaDesde = null)
+    public async Task<IActionResult> Buscar(
+        [FromQuery] int? idVigencia,
+        [FromQuery] int? idEstado,
+        [FromQuery] int? idTipoContratacion,
+        [FromQuery] string? nro = null,
+        [FromQuery] string? expte = null,
+        [FromQuery] DateTime? fechaDesde = null,
+        [FromQuery] DateTime? fechaHasta = null)
     {
-        var result = await _cotizacionService.BuscarAsync(idVigencia, idEstado, nro, expte, fechaDesde);
+        var result = await _cotizacionService.BuscarAsync(idVigencia, idEstado, idTipoContratacion, nro, expte, fechaDesde, fechaHasta);
         return Return(result);
     }
 
@@ -124,5 +131,13 @@ public class CotizacionController : BaseController
     {
         var result = await _cotizacionService.ProrrogarAsync(id, dto.Minutos);
         return Return(result);
+    }
+
+    [HttpGet("server-time")]
+    [AllowAnonymous]
+    public IActionResult GetServerTime()
+    {
+        // Retornamos la hora exacta del servidor
+        return Ok(new { serverTime = DateTime.Now });
     }
 }

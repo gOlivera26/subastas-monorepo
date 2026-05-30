@@ -33,6 +33,7 @@ public class CotizacionDetalleRequestDto
     public int? IdRenglon { get; set; }
     public decimal Cantidad { get; set; }
     public decimal ImporteBase { get; set; }
+    public decimal? ImporteMinimo { get; set; }
 }
 
 public class CotizacionRenglonRequestDto

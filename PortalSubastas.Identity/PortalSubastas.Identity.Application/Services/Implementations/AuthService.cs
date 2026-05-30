@@ -270,6 +270,12 @@ public class AuthService : BaseService, IAuthService
         if (organizacionPrincipal != null)
             claims.Add(new Claim("IdOrganizacion", organizacionPrincipal.IdOrganizacion.ToString()));
 
+        // Agregar IdProveedor si el usuario es representante de un proveedor
+        var proveedorRepresentante = _identityContext.TProveedoresRepresentantes
+            .FirstOrDefault(pr => pr.IdPersona == usuario.IdPersona);
+        if (proveedorRepresentante != null)
+            claims.Add(new Claim("IdProveedor", proveedorRepresentante.IdProveedor.ToString()));
+
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),

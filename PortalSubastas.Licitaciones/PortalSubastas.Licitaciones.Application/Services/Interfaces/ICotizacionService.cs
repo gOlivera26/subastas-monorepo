@@ -15,7 +15,7 @@ public interface ICotizacionService
     Task<OperationResponse<CotizacionResponseDto>> FinalizarAsync(int id);
     Task<OperationResponse<CotizacionResponseDto>> ProrrogarAsync(int id, int minutos);
     Task<OperationResponse<CotizacionResponseDto>> DesistirAsync(int id);
-    Task<OperationResponse<List<SubastaDashboardDto>>> BuscarAsync(int? idVigencia, int? idEstado, string? nro, string? expte, DateTime? fechaDesde);
+    Task<OperationResponse<List<SubastaDashboardDto>>> BuscarAsync(int? idVigencia, int? idEstado, int? idTipoContratacion, string? nro, string? expte, DateTime? fechaDesde, DateTime? fechaHasta);
 
     // Endpoints específicos para el Dashboard
     Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasEnCursoAsync(int? idVigencia);

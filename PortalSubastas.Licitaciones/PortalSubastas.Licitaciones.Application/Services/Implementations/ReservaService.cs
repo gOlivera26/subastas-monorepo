@@ -29,50 +29,60 @@ public class ReservaService : BaseService, IReservaService
             .Include(r => r.IdEstadoNavigation)
             .Include(r => r.IdUnidadAdmNavigation)
             .Include(r => r.IdSubResponsableNavigation)
-            .Include(r => r.TReservaDetalles.Where(d => d.FecBaja == null))
+            .Include(r => r.TReservaDetalles.Where(d => d.FecBaja == null && d.IdEstado != 20)) // Excluye ítems anulados individualmente
                 .ThenInclude(d => d.IdItemNavigation)
-            .Include(r => r.TReservaDetalles.Where(d => d.FecBaja == null))
+            .Include(r => r.TReservaDetalles.Where(d => d.FecBaja == null && d.IdEstado != 20))
                 .ThenInclude(d => d.IdMonedaNavigation)
             .AsQueryable();
 
         if (filtros != null)
         {
-            if (filtros.IdUnidadAdm.HasValue)
-                query = query.Where(r => r.IdUnidadAdm == filtros.IdUnidadAdm.Value);
-
-            if (filtros.IdSubResponsable.HasValue)
-                query = query.Where(r => r.IdSubResponsable == filtros.IdSubResponsable.Value);
-
-            if (filtros.IdVigencia.HasValue)
-                query = query.Where(r => r.IdVigencia == filtros.IdVigencia.Value);
-
-            if (!string.IsNullOrWhiteSpace(filtros.NroReserva))
-                query = query.Where(r => r.NroReserva.Contains(filtros.NroReserva));
+            if (filtros.IdUnidadAdm.HasValue) query = query.Where(r => r.IdUnidadAdm == filtros.IdUnidadAdm.Value);
+            if (filtros.IdSubResponsable.HasValue) query = query.Where(r => r.IdSubResponsable == filtros.IdSubResponsable.Value);
+            if (filtros.IdVigencia.HasValue) query = query.Where(r => r.IdVigencia == filtros.IdVigencia.Value);
+            if (!string.IsNullOrWhiteSpace(filtros.NroReserva)) query = query.Where(r => r.NroReserva.Contains(filtros.NroReserva));
         }
 
-        var reservas = await query
-            .OrderByDescending(r => r.IdReserva)
-            .ToListAsync();
+        var reservas = await query.OrderByDescending(r => r.IdReserva).ToListAsync();
+
+        // 1. Obtener IDs de detalles para calcular el consumo
+        var detalleIds = reservas.SelectMany(r => r.TReservaDetalles).Select(d => d.IdReservaDet).ToList();
+
+        // 2. Calcular consumos en subastas que NO estén Anuladas (20) o Desistidas (47)
+        var consumidoPorDetalle = await _context.TCotizacionDetalles
+            .Where(cd => detalleIds.Contains(cd.IdReservaDetalle) &&
+                         cd.IdCotizacionNavigation.IdEstado != 20 &&
+                         cd.IdCotizacionNavigation.IdEstado != 47 &&
+                         cd.IdCotizacionNavigation.FecBaja == null)
+            .GroupBy(cd => cd.IdReservaDetalle)
+            .Select(g => new { IdReservaDet = g.Key, Consumido = g.Sum(cd => cd.Cantidad) })
+            .ToDictionaryAsync(x => x.IdReservaDet, x => x.Consumido);
 
         var dtos = _mapper.Map<List<ReservaResponseDto>>(reservas);
         foreach (var dto in dtos)
         {
             var reserva = reservas.First(r => r.IdReserva == dto.IdReserva);
             dto.Detalles = reserva.TReservaDetalles
-                .Where(d => d.FecBaja == null)
-                .Select(d => new ReservaDetalleItemDto
+                .Select(d =>
                 {
-                    IdReservaDet = d.IdReservaDet,
-                    IdReserva = d.IdReserva,
-                    IdItem = d.IdItem,
-                    NItem = d.IdItemNavigation?.NItem,
-                    NroReserva = reserva.NroReserva,
-                    Cantidad = d.Cantidad ?? 0,
-                    Importe = d.Importe ?? 0,
-                    NombreUnidadAdm = reserva.IdUnidadAdmNavigation?.NombreUnidadAdm,
-                    NombreSubResponsable = reserva.IdSubResponsableNavigation?.Nombre,
-                    SimboloMoneda = d.IdMonedaNavigation?.Simbolo,
-                    FecIng = d.FecIng
+                    decimal consumido = consumidoPorDetalle.TryGetValue(d.IdReservaDet, out var c) ? c : 0;
+                    decimal restante = (d.Cantidad ?? 0) - consumido;
+
+                    return new ReservaDetalleItemDto
+                    {
+                        IdReservaDet = d.IdReservaDet,
+                        IdReserva = d.IdReserva,
+                        IdItem = d.IdItem,
+                        NItem = d.IdItemNavigation?.NItem,
+                        NroReserva = reserva.NroReserva,
+                        Cantidad = d.Cantidad ?? 0,
+                        CantidadRestante = restante, // CÁLCULO DEL STOCK
+                        Importe = d.Importe ?? 0,
+                        NombreUnidadAdm = reserva.IdUnidadAdmNavigation?.NombreUnidadAdm,
+                        NombreSubResponsable = reserva.IdSubResponsableNavigation?.Nombre,
+                        SimboloMoneda = d.IdMonedaNavigation?.Simbolo,
+                        FecIng = d.FecIng
+                    };
                 }).ToList();
         }
 
@@ -286,4 +296,6 @@ public class ReservaService : BaseService, IReservaService
 
         return Ok(estados);
     }
+
+    
 }

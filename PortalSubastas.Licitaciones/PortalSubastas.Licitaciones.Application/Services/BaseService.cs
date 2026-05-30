@@ -129,6 +129,12 @@ public abstract class BaseService
         return _httpContextAccessor?.HttpContext?.User?.IsInRole("SUPERADMIN") == true;
     }
 
+    protected int? GetUserProveedorId()
+    {
+        var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("IdProveedor");
+        return claim != null && int.TryParse(claim.Value, out int provId) ? provId : null;
+    }
+
     protected void PrepareAuditableEntity<T>(T entity, bool isNew, bool isDeleted = false)
     {
         var username = GetCurrentUsername();

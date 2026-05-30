@@ -41,6 +41,7 @@ public partial class PortalSubastasContext : DbContext
     public virtual DbSet<TOfertaSubasta> TOfertasSubastas { get; set; }
     public virtual DbSet<TGanador> TGanadores { get; set; }
     public virtual DbSet<TMensaje> TMensajes { get; set; }
+    public virtual DbSet<TGarantiaSubasta> TGarantiasSubastas { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -604,6 +605,11 @@ public partial class PortalSubastasContext : DbContext
             entity.Property(e => e.ProrrogaMinutos).HasColumnName("prorroga_minutos");
             entity.Property(e => e.NroExpediente).HasMaxLength(50).HasColumnName("nro_expediente");
             entity.Property(e => e.Redeterminacion).HasMaxLength(1).HasColumnName("redeterminacion");
+            entity.Property(e => e.TipoSobre).HasMaxLength(1).HasColumnName("tipo_sobre");
+            entity.Property(e => e.FechaLimiteImpugnar).HasColumnType("timestamp without time zone").HasColumnName("fecha_limite_impugnar");
+            entity.Property(e => e.FechaAperturaSobreUno).HasColumnType("timestamp without time zone").HasColumnName("fecha_apertura_sobre_uno");
+            entity.Property(e => e.FechaAperturaSobreDos).HasColumnType("timestamp without time zone").HasColumnName("fecha_apertura_sobre_dos");
+            entity.Property(e => e.MostrarBotonMejora).HasColumnName("mostrar_boton_mejora");
 
             entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
             entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
@@ -625,6 +631,7 @@ public partial class PortalSubastasContext : DbContext
             entity.Property(e => e.IdRenglon).HasColumnName("id_renglon");
             entity.Property(e => e.Cantidad).HasColumnType("numeric(18,2)").HasColumnName("cantidad");
             entity.Property(e => e.ImporteBase).HasColumnType("numeric(18,2)").HasColumnName("importe_base");
+            entity.Property(e => e.ImporteMinimo).HasColumnType("numeric(18,2)").HasColumnName("importe_minimo");
 
             entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
             entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
@@ -738,6 +745,35 @@ public partial class PortalSubastasContext : DbContext
             entity.Property(e => e.Usuario).IsRequired().HasMaxLength(100).HasColumnName("usuario");
             entity.Property(e => e.Contenido).IsRequired().HasColumnType("text").HasColumnName("contenido");
             entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+
+            entity.HasOne(d => d.IdCotizacionNavigation).WithMany().HasForeignKey(d => d.IdCotizacion).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TGarantiaSubasta>(entity =>
+        {
+            entity.HasKey(e => e.IdGarantia).HasName("t_garantias_subasta_pkey");
+            entity.ToTable("t_garantias_subasta", "negocio");
+
+            entity.Property(e => e.IdGarantia).HasColumnName("id_garantia");
+            entity.Property(e => e.IdCotizacion).HasColumnName("id_cotizacion");
+            entity.Property(e => e.IdProveedor).HasColumnName("id_proveedor");
+            entity.Property(e => e.IdTipoDocumento).HasColumnName("id_tipo_documento");
+            entity.Property(e => e.IdMoneda).HasColumnName("id_moneda");
+            entity.Property(e => e.CompaniaAseguradora).HasMaxLength(255).HasColumnName("compania_aseguradora");
+            entity.Property(e => e.NroPoliza).HasMaxLength(100).HasColumnName("nro_poliza");
+            entity.Property(e => e.MontoCaucion).HasColumnType("numeric(18,2)").HasColumnName("monto_caucion");
+            entity.Property(e => e.MontoPagare).HasColumnType("numeric(18,2)").HasColumnName("monto_pagare");
+            entity.Property(e => e.FechaPagare).HasColumnName("fecha_pagare");
+            entity.Property(e => e.Observacion).HasColumnName("observacion");
+            entity.Property(e => e.UrlArchivo).IsRequired().HasMaxLength(500).HasColumnName("url_archivo");
+            entity.Property(e => e.NombreArchivo).HasMaxLength(255).HasColumnName("nombre_archivo");
+
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
 
             entity.HasOne(d => d.IdCotizacionNavigation).WithMany().HasForeignKey(d => d.IdCotizacion).OnDelete(DeleteBehavior.Cascade);
         });
