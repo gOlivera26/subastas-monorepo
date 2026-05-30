@@ -47,6 +47,24 @@ public partial class PortalSubastasContext : DbContext
 
     public virtual DbSet<TUsuario> TUsuarios { get; set; }
 
+    public virtual DbSet<TVigencia> TVigencias { get; set; }
+
+    public virtual DbSet<TUnidadAdministrativa> TUnidadesAdministrativas { get; set; }
+
+    public virtual DbSet<TObjetoGasto> TObjetosGasto { get; set; }
+
+    public virtual DbSet<TCatalogoBien> TCatalogosBien { get; set; }
+
+    public virtual DbSet<TCategoriaProgramatica> TCategoriasProgramaticas { get; set; }
+
+    public virtual DbSet<TPagina> TPaginas { get; set; }
+
+    public virtual DbSet<TRolesPagina> TRolesPaginas { get; set; }
+
+    public virtual DbSet<TMoneda> TMonedas { get; set; }
+
+    public virtual DbSet<TSubResponsable> TSubResponsables { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<TEstadosUsuario>(entity =>
@@ -731,6 +749,300 @@ public partial class PortalSubastasContext : DbContext
                 .HasForeignKey(d => d.IdRol)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("t_usuarios_id_rol_fkey");
+        });
+
+        modelBuilder.Entity<TVigencia>(entity =>
+        {
+            entity.HasKey(e => e.IdVigencia).HasName("t_vigencias_pkey");
+
+            entity.ToTable("t_vigencias", "negocio");
+
+            entity.HasIndex(e => e.Ejercicio, "t_vigencias_ejercicio_key").IsUnique();
+
+            entity.Property(e => e.IdVigencia).HasColumnName("id_vigencia");
+            entity.Property(e => e.Ejercicio).HasColumnName("ejercicio");
+            entity.Property(e => e.ActivoEjecucion)
+                .HasDefaultValue(false)
+                .HasColumnName("activo_ejecucion");
+            entity.Property(e => e.UsrIng)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("'SISTEMA'::character varying")
+                .HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod)
+                .HasMaxLength(100)
+                .HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod)
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja)
+                .HasMaxLength(100)
+                .HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja)
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("fec_baja");
+        });
+
+        modelBuilder.Entity<TUnidadAdministrativa>(entity =>
+        {
+            entity.HasKey(e => e.IdUnidadAdm).HasName("t_unidades_administrativas_pkey");
+
+            entity.ToTable("t_unidades_administrativas", "negocio");
+
+            entity.Property(e => e.IdUnidadAdm).HasColumnName("id_unidad_adm");
+            entity.Property(e => e.NumeroUnidadAdm).HasColumnName("numero_unidad_adm");
+            entity.Property(e => e.NombreUnidadAdm)
+                .IsRequired()
+                .HasMaxLength(255)
+                .HasColumnName("nombre_unidad_adm");
+            entity.Property(e => e.IdVigencia).HasColumnName("id_vigencia");
+            entity.Property(e => e.IdOrganizacion).HasColumnName("id_organizacion");
+            entity.Property(e => e.Mail)
+                .HasMaxLength(255)
+                .HasColumnName("mail");
+            entity.Property(e => e.Alias)
+                .HasMaxLength(255)
+                .HasColumnName("alias");
+            entity.Property(e => e.Puerto).HasColumnName("puerto");
+            entity.Property(e => e.Smtp)
+                .HasMaxLength(255)
+                .HasColumnName("smtp");
+            entity.Property(e => e.UsrIng)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("'SISTEMA'::character varying")
+                .HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod)
+                .HasMaxLength(100)
+                .HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod)
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja)
+                .HasMaxLength(100)
+                .HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja)
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("fec_baja");
+
+            entity.HasOne(d => d.IdVigenciaNavigation).WithMany(p => p.TUnidadesAdministrativas)
+                .HasForeignKey(d => d.IdVigencia)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_unidades_administrativas_id_vigencia_fkey");
+
+            entity.HasOne(d => d.IdOrganizacionNavigation).WithMany(p => p.TUnidadesAdministrativas)
+                .HasForeignKey(d => d.IdOrganizacion)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_unidades_administrativas_id_organizacion_fkey");
+        });
+
+        modelBuilder.Entity<TObjetoGasto>(entity =>
+        {
+            entity.HasKey(e => e.IdObjetoGasto).HasName("t_objetos_gasto_pkey");
+
+            entity.ToTable("t_objetos_gasto", "negocio");
+
+            entity.HasIndex(e => e.NumeroObjeto, "t_objetos_gasto_numero_key").IsUnique();
+
+            entity.Property(e => e.IdObjetoGasto).HasColumnName("id_objeto_gasto");
+            entity.Property(e => e.IdObjetoGastoRel).HasColumnName("id_objeto_gasto_rel");
+            entity.Property(e => e.NumeroObjeto)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasColumnName("numero_objeto");
+            entity.Property(e => e.NombreObjeto)
+                .IsRequired()
+                .HasMaxLength(255)
+                .HasColumnName("nombre_objeto");
+            entity.Property(e => e.IdVigencia).HasColumnName("id_vigencia");
+            entity.Property(e => e.IdOrganizacion).HasColumnName("id_organizacion");
+            entity.Property(e => e.ImputaEjecucion)
+                .HasDefaultValue(false)
+                .HasColumnName("imputa_ejecucion");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+
+            entity.HasOne(d => d.IdObjetoGastoRelNavigation).WithMany(p => p.InverseIdObjetoGastoRelNavigation)
+                .HasForeignKey(d => d.IdObjetoGastoRel)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_objetos_gasto_id_objeto_gasto_rel_fkey");
+
+            entity.HasOne(d => d.IdVigenciaNavigation).WithMany()
+                .HasForeignKey(d => d.IdVigencia)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_objetos_gasto_id_vigencia_fkey");
+
+            entity.HasOne(d => d.IdOrganizacionNavigation).WithMany()
+                .HasForeignKey(d => d.IdOrganizacion)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_objetos_gasto_id_organizacion_fkey");
+        });
+
+        modelBuilder.Entity<TCatalogoBien>(entity =>
+        {
+            entity.HasKey(e => e.IdItem).HasName("t_catalogos_bien_pkey");
+
+            entity.ToTable("t_catalogos_bien", "negocio");
+
+            entity.HasIndex(e => e.Codigo, "t_catalogos_bien_codigo_key").IsUnique();
+
+            entity.Property(e => e.IdItem).HasColumnName("id_item");
+            entity.Property(e => e.IdItemRel).HasColumnName("id_item_rel");
+            entity.Property(e => e.Codigo)
+                .IsRequired()
+                .HasMaxLength(20)
+                .HasColumnName("codigo");
+            entity.Property(e => e.NItem)
+                .IsRequired()
+                .HasMaxLength(255)
+                .HasColumnName("n_item");
+            entity.Property(e => e.IdVigencia).HasColumnName("id_vigencia");
+            entity.Property(e => e.IdOrganizacion).HasColumnName("id_organizacion");
+            entity.Property(e => e.IdObjetoGasto).HasColumnName("id_objeto_gasto");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+
+            entity.HasOne(d => d.IdItemRelNavigation).WithMany(p => p.InverseIdItemRelNavigation)
+                .HasForeignKey(d => d.IdItemRel)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_catalogos_bien_id_item_rel_fkey");
+
+            entity.HasOne(d => d.IdVigenciaNavigation).WithMany()
+                .HasForeignKey(d => d.IdVigencia)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_catalogos_bien_id_vigencia_fkey");
+
+            entity.HasOne(d => d.IdOrganizacionNavigation).WithMany()
+                .HasForeignKey(d => d.IdOrganizacion)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_catalogos_bien_id_organizacion_fkey");
+
+            entity.HasOne(d => d.IdObjetoGastoNavigation).WithMany(p => p.TCatalogosBien)
+                .HasForeignKey(d => d.IdObjetoGasto)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_catalogos_bien_id_objeto_gasto_fkey");
+        });
+
+        modelBuilder.Entity<TPagina>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("t_paginas_pkey");
+            entity.ToTable("t_paginas", "iam");
+            entity.HasIndex(e => e.KeyName, "t_paginas_key_name_key").IsUnique();
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.IdModulo).HasColumnName("id_modulo");
+            entity.Property(e => e.KeyName).IsRequired().HasMaxLength(100).HasColumnName("key_name");
+            entity.Property(e => e.Titulo).IsRequired().HasMaxLength(100).HasColumnName("titulo");
+            entity.Property(e => e.RutaFrontend).HasMaxLength(255).HasColumnName("ruta_frontend");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+
+            entity.HasOne(d => d.IdModuloNavigation).WithMany(p => p.TPaginas)
+                .HasForeignKey(d => d.IdModulo)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_paginas_id_modulo_fkey");
+        });
+
+        modelBuilder.Entity<TRolesPagina>(entity =>
+        {
+            entity.HasKey(e => new { e.IdRol, e.IdPagina }).HasName("t_roles_paginas_pkey");
+            entity.ToTable("t_roles_paginas", "iam");
+            entity.Property(e => e.IdRol).HasColumnName("id_rol");
+            entity.Property(e => e.IdPagina).HasColumnName("id_pagina");
+
+            entity.HasOne(d => d.IdRolNavigation).WithMany(p => p.TRolesPaginas)
+                .HasForeignKey(d => d.IdRol)
+                .HasConstraintName("t_roles_paginas_id_rol_fkey");
+
+            entity.HasOne(d => d.IdPaginaNavigation).WithMany(p => p.TRolesPaginas)
+                .HasForeignKey(d => d.IdPagina)
+                .HasConstraintName("t_roles_paginas_id_pagina_fkey");
+        });
+
+        modelBuilder.Entity<TCategoriaProgramatica>(entity =>
+        {
+            entity.HasKey(e => e.IdCatProg).HasName("t_categorias_programaticas_pkey");
+            entity.ToTable("t_categorias_programaticas", "negocio");
+            entity.Property(e => e.IdCatProg).HasColumnName("id_cat_prog");
+            entity.Property(e => e.IdCatProgRel).HasColumnName("id_cat_prog_rel");
+            entity.Property(e => e.IdOrganizacion).HasColumnName("id_organizacion");
+            entity.Property(e => e.IdUnidadAdm).HasColumnName("id_unidad_adm");
+            entity.Property(e => e.IdVigencia).HasColumnName("id_vigencia");
+            entity.Property(e => e.Codigo).HasColumnName("codigo");
+            entity.Property(e => e.Nombre).IsRequired().HasMaxLength(500).HasColumnName("nombre");
+            entity.Property(e => e.Naturaleza).HasMaxLength(2).HasColumnName("naturaleza");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+
+            entity.HasOne(d => d.IdCatProgRelNavigation).WithMany(p => p.InverseIdCatProgRelNavigation)
+                .HasForeignKey(d => d.IdCatProgRel).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_categorias_programaticas_id_cat_prog_rel_fkey");
+            entity.HasOne(d => d.IdOrganizacionNavigation).WithMany()
+                .HasForeignKey(d => d.IdOrganizacion).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_categorias_programaticas_id_organizacion_fkey");
+            entity.HasOne(d => d.IdUnidadAdmNavigation).WithMany()
+                .HasForeignKey(d => d.IdUnidadAdm).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_categorias_programaticas_id_unidad_adm_fkey");
+            entity.HasOne(d => d.IdVigenciaNavigation).WithMany()
+                .HasForeignKey(d => d.IdVigencia).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_categorias_programaticas_id_vigencia_fkey");
+        });
+
+        modelBuilder.Entity<TMoneda>(entity =>
+        {
+            entity.HasKey(e => e.IdMoneda).HasName("t_moneda_pkey");
+            entity.ToTable("t_moneda", "negocio");
+            entity.Property(e => e.IdMoneda).HasColumnName("id_moneda");
+            entity.Property(e => e.Simbolo).HasMaxLength(10).HasColumnName("simbolo");
+            entity.Property(e => e.Nombre).IsRequired().HasMaxLength(200).HasColumnName("nombre");
+            entity.Property(e => e.Descripcion).HasMaxLength(500).HasColumnName("descripcion");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+        });
+
+        modelBuilder.Entity<TSubResponsable>(entity =>
+        {
+            entity.HasKey(e => e.IdSubResponsable).HasName("t_sub_responsables_pkey");
+            entity.ToTable("t_sub_responsables", "negocio");
+            entity.Property(e => e.IdSubResponsable).HasColumnName("id_sub_responsable");
+            entity.Property(e => e.Codigo).HasMaxLength(20).HasColumnName("codigo");
+            entity.Property(e => e.Nombre).IsRequired().HasMaxLength(500).HasColumnName("nombre");
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+            entity.Property(e => e.IdSubRespRel).HasColumnName("id_sub_resp_rel");
+            entity.Property(e => e.Vigente).HasColumnName("vigente");
+            entity.Property(e => e.IdUnidadAdm).HasColumnName("id_unidad_adm");
+
+            entity.HasOne(d => d.IdSubRespRelNavigation).WithMany(p => p.InverseIdSubRespRelNavigation)
+                .HasForeignKey(d => d.IdSubRespRel).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_sub_responsables_id_sub_resp_rel_fkey");
+            entity.HasOne(d => d.IdUnidadAdmNavigation).WithMany()
+                .HasForeignKey(d => d.IdUnidadAdm).OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_sub_responsables_id_unidad_adm_fkey");
         });
 
         OnModelCreatingPartial(modelBuilder);

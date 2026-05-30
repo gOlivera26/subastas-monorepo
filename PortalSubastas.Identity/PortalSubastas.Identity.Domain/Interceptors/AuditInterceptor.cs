@@ -1,19 +1,21 @@
-﻿using Microsoft.EntityFrameworkCore.ChangeTracking;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+
 
 namespace PortalSubastas.Identity.Domain.Interceptors;
 
 public class AuditInterceptor : SaveChangesInterceptor
 {
-    private readonly IPublishEndpoint _publishEndpoint;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     // Lista temporal para guardar los eventos hasta que la BD confirme los IDs
     private List<AuditEntryPending> _pendingAudits = new();
 
-    public AuditInterceptor(IPublishEndpoint publishEndpoint, IHttpContextAccessor httpContextAccessor)
+    public AuditInterceptor(IHttpContextAccessor httpContextAccessor, IPublishEndpoint publishEndpoint)
     {
-        _publishEndpoint = publishEndpoint;
         _httpContextAccessor = httpContextAccessor;
+        _publishEndpoint = publishEndpoint;
     }
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -24,6 +26,9 @@ public class AuditInterceptor : SaveChangesInterceptor
         var context = eventData.Context;
         if (context == null) return new ValueTask<InterceptionResult<int>>(result);
 
+        var username = GetCurrentUsername();
+        var now = DateTime.Now;
+
         var entries = context.ChangeTracker.Entries()
             .Where(e => e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted)
             .ToList();
@@ -33,6 +38,36 @@ public class AuditInterceptor : SaveChangesInterceptor
 
         foreach (var entry in entries)
         {
+            // ── 1. Llenar campos de auditoría y soft delete ──
+            if (entry.Entity is IAuditableEntity auditable)
+            {
+                switch (entry.State)
+                {
+                    case EntityState.Added:
+                        auditable.UsrIng = username;
+                        auditable.FecIng = now;
+                        break;
+
+                    case EntityState.Modified:
+                        if (entry.Entity is not IFullAuditableEntity { UsrBaja: not null })
+                        {
+                            auditable.UsrMod = username;
+                            auditable.FecMod = now;
+                        }
+                        break;
+
+                    case EntityState.Deleted:
+                        entry.State = EntityState.Modified;
+                        if (entry.Entity is IFullAuditableEntity fullAuditable)
+                        {
+                            fullAuditable.UsrBaja = username;
+                            fullAuditable.FecBaja = now;
+                        }
+                        break;
+                }
+            }
+
+            // ── 2. Capturar datos para DataChangedEvent ──
             var auditEntry = new AuditEntryPending
             {
                 Entry = entry,
@@ -52,7 +87,6 @@ public class AuditInterceptor : SaveChangesInterceptor
                 else if (entry.State == EntityState.Added)
                 {
                     auditEntry.NewValues[propertyName] = property.CurrentValue!;
-                    // Si el ID es autoincremental, lo marcamos para actualizarlo después
                     if (property.IsTemporary) auditEntry.TemporaryProperties.Add(property);
                 }
                 else if (entry.State == EntityState.Modified && property.IsModified)
@@ -83,7 +117,8 @@ public class AuditInterceptor : SaveChangesInterceptor
                 audit.NewValues[prop.Metadata.Name] = prop.CurrentValue!;
             }
 
-            var primaryKey = audit.Entry.Properties.FirstOrDefault(p => p.Metadata.IsPrimaryKey())?.CurrentValue?.ToString() ?? "0";
+            var primaryKey = audit.Entry.Properties
+                .FirstOrDefault(p => p.Metadata.IsPrimaryKey())?.CurrentValue?.ToString() ?? "0";
 
             var auditEvent = new DataChangedEvent(
                 UserId: audit.UserId,
@@ -100,6 +135,11 @@ public class AuditInterceptor : SaveChangesInterceptor
 
         _pendingAudits.Clear();
         return await base.SavedChangesAsync(eventData, result, cancellationToken);
+    }
+
+    private string GetCurrentUsername()
+    {
+        return _httpContextAccessor.HttpContext?.User?.Identity?.Name ?? "Sistema";
     }
 }
 

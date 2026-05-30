@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+EXPOSE 8080
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["PortalSubastas.Licitaciones/PortalSubastas.Licitaciones.API/PortalSubastas.Licitaciones.API.csproj", "PortalSubastas.Licitaciones/PortalSubastas.Licitaciones.API/"]
+COPY ["PortalSubastas.Licitaciones/PortalSubastas.Licitaciones.Application/PortalSubastas.Licitaciones.Application.csproj", "PortalSubastas.Licitaciones/PortalSubastas.Licitaciones.Application/"]
+COPY ["PortalSubastas.Licitaciones/PortalSubastas.Licitaciones.Domain/PortalSubastas.Licitaciones.Domain.csproj", "PortalSubastas.Licitaciones/PortalSubastas.Licitaciones.Domain/"]
+RUN dotnet restore "PortalSubastas.Licitaciones/PortalSubastas.Licitaciones.API/PortalSubastas.Licitaciones.API.csproj"
+COPY . .
+WORKDIR "/src/PortalSubastas.Licitaciones/PortalSubastas.Licitaciones.API"
+RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "PortalSubastas.Licitaciones.API.dll"]

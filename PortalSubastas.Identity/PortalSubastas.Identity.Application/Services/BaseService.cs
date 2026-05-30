@@ -112,6 +112,23 @@ public abstract class BaseService
         return int.TryParse(claimId, out int id) ? id : null;
     }
 
+    protected Guid? GetCurrentUserIdGuid()
+    {
+        var claimId = _httpContextAccessor?.HttpContext?.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(claimId, out Guid id) ? id : null;
+    }
+
+    protected int? GetUserOrganizationId()
+    {
+        var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("IdOrganizacion");
+        return claim != null && int.TryParse(claim.Value, out int orgId) ? orgId : null;
+    }
+
+    protected bool IsSuperAdmin()
+    {
+        return _httpContextAccessor?.HttpContext?.User?.IsInRole("SUPERADMIN") == true;
+    }
+
     protected void PrepareAuditableEntity<T>(T entity, bool isNew, bool isDeleted = false)
     {
         var username = GetCurrentUsername();
@@ -175,13 +192,7 @@ public abstract class BaseService
     protected int GetJurisdiccionCache()
     {
         var user = _httpContextAccessor?.HttpContext?.User;
-        return int.Parse(user?.Claims.FirstOrDefault(c => c.Type == "IdJurisdiccion")?.Value);
-    }
-
-    protected Guid? GetCurrentUserIdGuid()
-    {
-        var claimId = _httpContextAccessor?.HttpContext?.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(claimId, out Guid id) ? id : null;
+        return int.Parse(user?.Claims.FirstOrDefault(c => c.Type == "IdJurisdiccion")?.Value ?? "0");
     }
 
     protected async Task<OperationResponse<TDto>> InsertAsync<TEntity, TDto>(TDto dto, DbContext context)

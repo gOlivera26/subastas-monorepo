@@ -146,6 +146,13 @@ public static class ServicesConfig
         services.AddScoped<IOrganizationService, OrganizationService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<IVigenciaService, VigenciaService>();
+        services.AddScoped<IUnidadAdministrativaService, UnidadAdministrativaService>();
+        services.AddScoped<IObjetoGastoService, ObjetoGastoService>();
+        services.AddScoped<ICatalogoBienService, CatalogoBienService>();
+        services.AddScoped<ICategoriaProgramaticaService, CategoriaProgramaticaService>();
+        services.AddScoped<IMonedaService, MonedaService>();
+        services.AddScoped<ISubResponsableService, SubResponsableService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)

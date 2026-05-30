@@ -49,6 +49,8 @@ public static class ServicesConfig
 
         services.AddControllers();
 
+        services.AddHealthChecks();
+
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder()
                 .RequireAuthenticatedUser()

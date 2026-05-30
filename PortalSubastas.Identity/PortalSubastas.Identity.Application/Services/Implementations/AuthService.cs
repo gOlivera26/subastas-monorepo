@@ -40,15 +40,39 @@ public class AuthService : BaseService, IAuthService
         var modulosPermitidos = await _identityContext.TRolesModulos
             .Include(rm => rm.IdModuloNavigation)
             .Where(rm => rm.IdRol == usuario.IdRol)
-            .OrderBy(rm => rm.IdModuloNavigation.Orden)
             .Select(rm => new ModuloDto
             {
+                Id = rm.IdModuloNavigation.Id,
+                KeyName = rm.IdModuloNavigation.KeyName,
                 Titulo = rm.IdModuloNavigation.Titulo,
                 Descripcion = rm.IdModuloNavigation.Descripcion,
                 Icono = rm.IdModuloNavigation.IconoLucide,
                 Ruta = rm.IdModuloNavigation.RutaFrontend
             })
             .ToListAsync();
+
+        // Incluir módulos que tengan páginas asignadas aunque no estén en TRolesModulo
+        var modulosDesdePaginas = await _identityContext.TRolesPaginas
+            .Include(rp => rp.IdPaginaNavigation).ThenInclude(p => p.IdModuloNavigation)
+            .Where(rp => rp.IdRol == usuario.IdRol)
+            .Select(rp => rp.IdPaginaNavigation.IdModuloNavigation)
+            .Distinct()
+            .Select(m => new ModuloDto
+            {
+                Id = m.Id,
+                KeyName = m.KeyName,
+                Titulo = m.Titulo,
+                Descripcion = m.Descripcion,
+                Icono = m.IconoLucide,
+                Ruta = m.RutaFrontend
+            })
+            .ToListAsync();
+
+        // Merge sin duplicados por Id
+        modulosPermitidos = modulosPermitidos
+            .UnionBy(modulosDesdePaginas, m => m.Id)
+            .OrderBy(m => modulosPermitidos.Concat(modulosDesdePaginas).ToList().IndexOf(m))
+            .ToList();
 
         var token = GenerarJwtToken(usuario);
 
@@ -62,7 +86,20 @@ public class AuthService : BaseService, IAuthService
             NombreUsuario = $"{usuario.IdPersonaNavigation.Nombre} {usuario.IdPersonaNavigation.Apellido}",
             Email = usuario.EmailLogin,
             Rol = usuario.IdRolNavigation.Nombre,
-            Modulos = modulosPermitidos
+            Modulos = modulosPermitidos,
+            Paginas = await _identityContext.TRolesPaginas
+                .Include(rp => rp.IdPaginaNavigation).ThenInclude(p => p.IdModuloNavigation)
+                .Where(rp => rp.IdRol == usuario.IdRol)
+                .Select(rp => new PortalSubastas.Identity.Application.ResponseDto.Role.PaginaDto
+                {
+                    Id = rp.IdPagina,
+                    IdModulo = rp.IdPaginaNavigation.IdModulo,
+                    ModuloTitulo = rp.IdPaginaNavigation.IdModuloNavigation.Titulo,
+                    KeyName = rp.IdPaginaNavigation.KeyName,
+                    Titulo = rp.IdPaginaNavigation.Titulo,
+                    RutaFrontend = rp.IdPaginaNavigation.RutaFrontend
+                })
+                .ToListAsync()
         };
 
         await PublishSystemLogAsync(_publishEndpoint, "INICIO_SESION", "IAM",
@@ -219,6 +256,9 @@ public class AuthService : BaseService, IAuthService
         var jwtSettings = _configuration.GetSection("Jwt");
         var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]!);
 
+        var organizacionPrincipal = _identityContext.TJurisdiccionesUsuarios
+            .FirstOrDefault(j => j.IdUsuario == usuario.Id && j.EsPrincipal == true);
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
@@ -226,6 +266,15 @@ public class AuthService : BaseService, IAuthService
             new(ClaimTypes.Name, $"{usuario.IdPersonaNavigation.Nombre} {usuario.IdPersonaNavigation.Apellido}"),
             new(ClaimTypes.Role, usuario.IdRolNavigation.Nombre)
         };
+
+        if (organizacionPrincipal != null)
+            claims.Add(new Claim("IdOrganizacion", organizacionPrincipal.IdOrganizacion.ToString()));
+
+        // Agregar IdProveedor si el usuario es representante de un proveedor
+        var proveedorRepresentante = _identityContext.TProveedoresRepresentantes
+            .FirstOrDefault(pr => pr.IdPersona == usuario.IdPersona);
+        if (proveedorRepresentante != null)
+            claims.Add(new Claim("IdProveedor", proveedorRepresentante.IdProveedor.ToString()));
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
