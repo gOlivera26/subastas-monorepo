@@ -80,10 +80,15 @@ public class CotizacionService : BaseService, ICotizacionService
             .ToDictionaryAsync(i => i.IdItem, i => i.NItem);
 
         var resDetIds = dto.Detalles.Select(d => d.IdReservaDetalle).ToList();
+
+        // MODIFICADO AQUÍ: Traemos NroReserva y también IdMoneda
         var resMap = await _context.TReservaDetalles
             .Include(rd => rd.IdReservaNavigation)
             .Where(rd => resDetIds.Contains(rd.IdReservaDet))
-            .ToDictionaryAsync(rd => rd.IdReservaDet, rd => rd.IdReservaNavigation?.NroReserva);
+            .ToDictionaryAsync(rd => rd.IdReservaDet, rd => new {
+                NroReserva = rd.IdReservaNavigation?.NroReserva,
+                IdMoneda = rd.IdMoneda
+            });
 
         foreach (var d in dto.Detalles)
         {
@@ -91,10 +96,18 @@ public class CotizacionService : BaseService, ICotizacionService
             {
                 d.NItem = nitem;
             }
-            if (resMap.TryGetValue(d.IdReservaDetalle, out var nro))
+            if (resMap.TryGetValue(d.IdReservaDetalle, out var resData))
             {
-                d.NroReserva = nro;
+                d.NroReserva = resData.NroReserva;
+                d.IdMoneda = resData.IdMoneda; // <--- ASIGNAMOS LA MONEDA
             }
+        }
+
+        // NUEVO: Asignar la moneda al renglón (tomando la del primer ítem del grupo)
+        foreach (var r in dto.Renglones)
+        {
+            var primerDetalle = dto.Detalles.FirstOrDefault(d => d.IdRenglon == r.IdRenglon);
+            r.IdMoneda = primerDetalle?.IdMoneda;
         }
 
         return Ok(dto);
@@ -366,12 +379,32 @@ public class CotizacionService : BaseService, ICotizacionService
             .FirstOrDefaultAsync(c => c.IdCotizacion == id);
 
         if (entity == null || entity.Especificacion == null) return NotFound<CotizacionResponseDto>();
-        
+
         entity.Especificacion.FechaFinalizacionSubasta = entity.Especificacion.FechaFinalizacionSubasta?.AddMinutes(minutos);
         PrepareAuditableEntity(entity.Especificacion, isNew: false);
         await _context.SaveChangesAsync();
 
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
+    }
+
+    public async Task<OperationResponse<bool>> DesistirParticipacionAsync(int idCotizacion)
+    {
+        var idProveedor = GetUserProveedorId();
+        if (!idProveedor.HasValue)
+            return BadRequest<bool>("No se pudo identificar al proveedor activo.");
+
+        var participacion = await _context.TCotizacionProveedores
+            .FirstOrDefaultAsync(p => p.IdCotizacion == idCotizacion && p.IdProveedor == idProveedor.Value && p.FecBaja == null);
+
+        if (participacion == null)
+            return BadRequest<bool>("No estás asignado como proveedor a esta subasta.");
+
+        participacion.Ganadora = "D";
+        PrepareAuditableEntity(participacion, isNew: false);
+
+        await _context.SaveChangesAsync();
+
+        return Ok(true);
     }
 
     private string GetEstadoNombre(int idEstado) => idEstado switch

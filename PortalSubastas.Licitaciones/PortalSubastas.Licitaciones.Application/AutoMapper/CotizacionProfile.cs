@@ -21,5 +21,12 @@ public class CotizacionProfile : Profile
         CreateMap<TCotizacionRenglon, CotizacionRenglonResponseDto>();
         CreateMap<CotizacionRenglonRequestDto, TCotizacionRenglon>();
         CreateMap<TCotizacionProveedor, CotizacionProveedorResponseDto>();
+
+        CreateMap<TMensaje, ConsultaResponseDto>()
+            .ForMember(d => d.UsuarioPregunta, o => o.MapFrom(s => s.Usuario))
+            .ForMember(d => d.Pregunta, o => o.MapFrom(s => s.Contenido))
+            .ForMember(d => d.FechaPregunta, o => o.MapFrom(s => s.FecIng));
+
+        CreateMap<TCotizacionDocumento, CotizacionDocumentoResponseDto>();
     }
 }

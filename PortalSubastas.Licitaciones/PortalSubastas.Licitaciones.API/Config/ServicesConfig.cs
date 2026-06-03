@@ -172,7 +172,13 @@ public static class ServicesConfig
         services.AddScoped<IObjetoGastoService, ObjetoGastoService>();
         services.AddScoped<ICotizacionService, CotizacionService>();
         services.AddScoped<IGanadorService, GanadorService>();
+        services.AddScoped<IFileStorageService, CloudflareR2StorageService>();
         services.AddScoped<IGarantiaService, GarantiaService>();
+        services.AddScoped<IOfertaSubastaService, OfertaSubastaService>();
+        services.AddScoped<ISubastaNotificationService, PortalSubastas.Licitaciones.API.Services.SubastaNotificationService>();
+        services.AddScoped<IConsultaService, ConsultaService>();
+        services.AddScoped<IFileStorageService, CloudflareR2StorageService>();
+        services.AddScoped<ICotizacionDocumentoService, CotizacionDocumentoService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)

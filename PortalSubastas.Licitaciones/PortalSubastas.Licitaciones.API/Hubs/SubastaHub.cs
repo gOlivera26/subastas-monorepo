@@ -1,16 +1,23 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using PortalSubastas.Licitaciones.Domain.Models;
 
 namespace PortalSubastas.Licitaciones.API.Hubs;
 
 [Authorize]
 public class SubastaHub : Hub
 {
-    private static readonly HashSet<int> _subastasCerradas = new();
 
+    private readonly PortalSubastasContext _context;
+
+    public SubastaHub(PortalSubastasContext context)
+    {
+        _context = context;
+    }
+
+    // --- Gestión de Salas de Subastas ---
     public async Task UnirseSubasta(int idCotizacion)
     {
+        await ValidarAccesoPrivadoAsync(idCotizacion);
         await Groups.AddToGroupAsync(Context.ConnectionId, $"subasta_{idCotizacion}");
     }
 
@@ -19,30 +26,10 @@ public class SubastaHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"subasta_{idCotizacion}");
     }
 
-    public async Task<bool> EnviarOferta(int idCotizacion, int? idCotizacionDetalle, int? idRenglon, decimal monto, int idProveedor)
-    {
-        if (_subastasCerradas.Contains(idCotizacion))
-            return false;
-
-        var oferta = new
-        {
-            idCotizacion,
-            idCotizacionDetalle,
-            idRenglon,
-            monto,
-            idProveedor,
-            fecha = DateTime.Now,
-            connectionId = Context.ConnectionId,
-            usuario = Context.User?.Identity?.Name ?? "Anónimo"
-        };
-
-        await Clients.Group($"subasta_{idCotizacion}").SendAsync("OfertaRecibida", oferta);
-        return true;
-    }
-
-    // --- Mensajería en tiempo real ---
+    // --- Mensajería en tiempo real (Chat/Aclaraciones) ---
     public async Task UnirseMensajes(int idCotizacion)
     {
+        await ValidarAccesoPrivadoAsync(idCotizacion);
         await Groups.AddToGroupAsync(Context.ConnectionId, $"chat_{idCotizacion}");
     }
 
@@ -70,13 +57,28 @@ public class SubastaHub : Hub
         await Clients.OthersInGroup($"chat_{idCotizacion}").SendAsync("UsuarioEscribiendo", usuario);
     }
 
-    public static void CerrarSubasta(int idCotizacion)
+    private async Task ValidarAccesoPrivadoAsync(int idCotizacion)
     {
-        _subastasCerradas.Add(idCotizacion);
-    }
+        var isSuperAdmin = Context.User?.IsInRole("SUPERADMIN") ?? false;
+        if (isSuperAdmin) return; // Los admins pueden entrar a cualquier sala
 
-    public static void ReabrirSubasta(int idCotizacion)
-    {
-        _subastasCerradas.Remove(idCotizacion);
+        var strIdProveedor = Context.User?.FindFirst("IdProveedor")?.Value;
+        int.TryParse(strIdProveedor, out int idProveedor);
+
+        var especificacion = await _context.TCotizacionEspecificaciones
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.IdCotizacion == idCotizacion);
+
+        // Si existe y no es Pública (1 = Pública, 0 = Privada, 2 = Cerrada)
+        if (especificacion != null && especificacion.Redeterminacion != "1")
+        {
+            bool estaInvitado = await _context.TCotizacionProveedores
+                .AnyAsync(p => p.IdCotizacion == idCotizacion && p.IdProveedor == idProveedor && p.FecBaja == null);
+
+            if (!estaInvitado)
+            {
+                throw new HubException("Acceso denegado: La subasta es de carácter privado/cerrado y no posee invitación.");
+            }
+        }
     }
 }
