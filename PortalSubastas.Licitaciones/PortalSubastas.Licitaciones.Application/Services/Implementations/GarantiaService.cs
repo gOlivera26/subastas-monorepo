@@ -1,4 +1,9 @@
-﻿using PortalSubastas.Licitaciones.Application.RequestDto.Garantia;
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
+using AutoMapper;
+using PortalSubastas.Licitaciones.Application.RequestDto.Garantia;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Garantia;
 using PortalSubastas.Licitaciones.Application.Services.Interfaces;
@@ -9,11 +14,21 @@ namespace PortalSubastas.Licitaciones.Application.Services.Implementations;
 public class GarantiaService : BaseService, IGarantiaService
 {
     private new readonly PortalSubastasContext _context;
+    private readonly IFileStorageService _fileStorageService;
+    private readonly IConfiguration _configuration;
 
-    public GarantiaService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache)
+    public GarantiaService(
+        PortalSubastasContext context,
+        IMapper mapper,
+        IHttpContextAccessor httpContextAccessor,
+        IMemoryCache cache,
+        IFileStorageService fileStorageService,
+        IConfiguration configuration)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
+        _fileStorageService = fileStorageService;
+        _configuration = configuration;
     }
 
     public async Task<OperationResponse<List<GarantiaResponseDto>>> GetByCotizacionAsync(int idCotizacion, int? idProveedor)
@@ -21,7 +36,6 @@ public class GarantiaService : BaseService, IGarantiaService
         var query = _context.TGarantiasSubastas
             .Where(g => g.IdCotizacion == idCotizacion && g.FecBaja == null);
 
-        // Si es un proveedor, solo ve sus garantías. Si es Admin (idProveedor null), ve todas.
         if (idProveedor.HasValue && idProveedor.Value > 0)
         {
             query = query.Where(g => g.IdProveedor == idProveedor.Value);
@@ -39,8 +53,10 @@ public class GarantiaService : BaseService, IGarantiaService
         if (dto.Archivo.Length > 20 * 1024 * 1024)
             return BadRequest<GarantiaResponseDto>("El archivo no puede superar los 20 MB.");
 
-        // TODO: Reemplazar con el IFileStorageService real conectado a S3/R2 o MinIO.
-        var urlArchivo = $"https://storage.midominio.com/garantias/{Guid.NewGuid()}_{dto.Archivo.FileName}";
+        string bucketName = _configuration["CloudflareR2:BucketName"] ?? "subasta-electronica";
+
+   
+        string urlArchivo = await _fileStorageService.UploadFileAsync(dto.Archivo, bucketName, "garantias-pagare/");
 
         var entity = new TGarantiaSubasta
         {
@@ -71,7 +87,10 @@ public class GarantiaService : BaseService, IGarantiaService
         var entity = await _context.TGarantiasSubastas.FindAsync(id);
         if (entity == null) return NotFound<bool>();
 
-        // Usamos la función DeleteAsync heredada de BaseService que maneja el Soft Delete (FecBaja/UsrBaja)
+        // Opcional: Borrar el archivo físico de Cloudflare R2 al darlo de baja lógicamente
+        // string bucketName = _configuration["CloudflareR2:BucketName"] ?? "subasta-electronica";
+        // await _fileStorageService.DeleteFileAsync(entity.UrlArchivo, bucketName);
+
         return await DeleteAsync(entity, _context);
     }
 }

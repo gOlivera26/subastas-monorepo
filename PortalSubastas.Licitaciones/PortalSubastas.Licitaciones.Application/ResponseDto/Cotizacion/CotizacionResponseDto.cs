@@ -45,6 +45,7 @@ public class CotizacionDetalleResponseDto
     public decimal Cantidad { get; set; }
     public decimal ImporteBase { get; set; }
     public decimal? ImporteMinimo { get; set; }
+    public int? IdMoneda { get; set; }
 }
 
 public class CotizacionRenglonResponseDto
@@ -52,6 +53,7 @@ public class CotizacionRenglonResponseDto
     public int IdRenglon { get; set; }
     public int NumeroRenglon { get; set; }
     public string Descripcion { get; set; }
+    public int? IdMoneda { get; set; }
 }
 
 public class CotizacionProveedorResponseDto

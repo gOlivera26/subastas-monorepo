@@ -133,6 +133,14 @@ public class CotizacionController : BaseController
         return Return(result);
     }
 
+    [HttpPost("{id:int}/proveedor-desistir")]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> DesistirParticipacion(int id)
+    {
+        var result = await _cotizacionService.DesistirParticipacionAsync(id);
+        return Return(result);  
+    }
+
     [HttpGet("server-time")]
     [AllowAnonymous]
     public IActionResult GetServerTime()

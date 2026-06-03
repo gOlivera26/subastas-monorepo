@@ -4,6 +4,9 @@ using PortalSubastas.Licitaciones.API.Middlewares;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Hosting;
 
+TimeZoneInfo.ClearCachedData();
+Environment.SetEnvironmentVariable("TZ", "America/Argentina/Buenos_Aires");
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddMassTransit(x =>

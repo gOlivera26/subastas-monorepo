@@ -17,5 +17,6 @@ public partial class PortalSubastasContext
         modelBuilder.Entity<TCatalogosBien>().HasQueryFilter(e => e.FecBaja == null);
         modelBuilder.Entity<TObjetosGasto>().HasQueryFilter(e => e.FecBaja == null);
         modelBuilder.Entity<TGarantiaSubasta>().HasQueryFilter(e => e.FecBaja == null);
+        modelBuilder.Entity<TCotizacionDocumento>().HasQueryFilter(e => e.FecBaja == null);
     }
 }

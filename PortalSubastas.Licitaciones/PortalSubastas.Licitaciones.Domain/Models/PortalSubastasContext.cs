@@ -42,6 +42,7 @@ public partial class PortalSubastasContext : DbContext
     public virtual DbSet<TGanador> TGanadores { get; set; }
     public virtual DbSet<TMensaje> TMensajes { get; set; }
     public virtual DbSet<TGarantiaSubasta> TGarantiasSubastas { get; set; }
+    public virtual DbSet<TCotizacionDocumento> TCotizacionDocumentos { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -746,6 +747,10 @@ public partial class PortalSubastasContext : DbContext
             entity.Property(e => e.Contenido).IsRequired().HasColumnType("text").HasColumnName("contenido");
             entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
 
+            entity.Property(e => e.Respuesta).HasColumnType("text").HasColumnName("respuesta");
+            entity.Property(e => e.FechaRespuesta).HasColumnType("timestamp without time zone").HasColumnName("fecha_respuesta");
+            entity.Property(e => e.UsuarioRespuesta).HasMaxLength(100).HasColumnName("usuario_respuesta");
+
             entity.HasOne(d => d.IdCotizacionNavigation).WithMany().HasForeignKey(d => d.IdCotizacion).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -773,6 +778,29 @@ public partial class PortalSubastasContext : DbContext
             entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
             entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
             entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+
+            entity.HasOne(d => d.IdCotizacionNavigation).WithMany().HasForeignKey(d => d.IdCotizacion).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TCotizacionDocumento>(entity =>
+        {
+            entity.HasKey(e => e.IdCotDocumento).HasName("t_cotizacion_documento_pkey");
+            entity.ToTable("t_cotizacion_documento", "negocio");
+
+            entity.Property(e => e.IdCotDocumento).HasColumnName("id_cot_documento");
+            entity.Property(e => e.IdCotizacion).HasColumnName("id_cotizacion");
+            entity.Property(e => e.TipoDocumento).IsRequired().HasMaxLength(50).HasColumnName("tipo_documento");
+            entity.Property(e => e.NombreArchivo).IsRequired().HasMaxLength(255).HasColumnName("nombre_archivo");
+            entity.Property(e => e.UrlArchivo).IsRequired().HasMaxLength(500).HasColumnName("url_archivo");
+
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+
+            // FIX: Declaramos explícitamente que estas columnas aceptan NULL en la base de datos
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod").IsRequired(false);
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja").IsRequired(false);
             entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
 
             entity.HasOne(d => d.IdCotizacionNavigation).WithMany().HasForeignKey(d => d.IdCotizacion).OnDelete(DeleteBehavior.Cascade);

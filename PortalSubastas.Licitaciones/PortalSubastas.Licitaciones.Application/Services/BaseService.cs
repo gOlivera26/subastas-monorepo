@@ -138,7 +138,8 @@ public abstract class BaseService
     protected void PrepareAuditableEntity<T>(T entity, bool isNew, bool isDeleted = false)
     {
         var username = GetCurrentUsername();
-        var now = DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Unspecified);
+        var zoneAr = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
+        var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zoneAr);
 
         if (entity is IAuditableEntity auditable)
         {
