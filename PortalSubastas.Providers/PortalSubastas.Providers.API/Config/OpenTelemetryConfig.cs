@@ -1,10 +1,10 @@
-﻿namespace PortalSubastas.Identity.API.Config;
+﻿namespace PortalSubastas.Providers.API.Config;
 
 public static class OpenTelemetryConfig
 {
     public static IServiceCollection AddOpenTelemetryTracing(this IServiceCollection services, IConfiguration configuration)
     {
-        var serviceName = configuration["OTEL_SERVICE_NAME"] ?? "PortalSubastas.Identity-API";
+        var serviceName = configuration["OTEL_SERVICE_NAME"] ?? "PortalSubastas.Providers-API";
         var otlpEndpoint = configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "http://localhost:4317";
         var environment = configuration["ASPNETCORE_ENVIRONMENT"] ?? "Development";
 
@@ -62,7 +62,6 @@ public static class OpenTelemetryConfig
     public static WebApplication UseOpenTelemetry(this WebApplication app)
     {
         app.UseOpenTelemetryPrometheusScrapingEndpoint();
-
         return app;
     }
 }

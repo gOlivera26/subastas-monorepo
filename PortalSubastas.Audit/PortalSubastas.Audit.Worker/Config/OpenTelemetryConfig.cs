@@ -1,13 +1,19 @@
-﻿namespace PortalSubastas.Identity.API.Config;
+﻿using Npgsql;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+
+namespace PortalSubastas.Audit.Worker.Config;
 
 public static class OpenTelemetryConfig
 {
     public static IServiceCollection AddOpenTelemetryTracing(this IServiceCollection services, IConfiguration configuration)
     {
-        var serviceName = configuration["OTEL_SERVICE_NAME"] ?? "PortalSubastas.Identity-API";
+        var serviceName = configuration["OTEL_SERVICE_NAME"] ?? "PortalSubastas.Audit-Worker";
         var otlpEndpoint = configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "http://localhost:4317";
-        var environment = configuration["ASPNETCORE_ENVIRONMENT"] ?? "Development";
-
+        var environment = configuration["DOTNET_ENVIRONMENT"] ?? "Development"; 
         services.AddOpenTelemetry()
             .ConfigureResource(resource => resource
                 .AddService(serviceName: serviceName)
@@ -17,12 +23,8 @@ public static class OpenTelemetryConfig
                     ["service.name"] = serviceName
                 }))
             .WithTracing(tracing => tracing
-                .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
-                .AddEntityFrameworkCoreInstrumentation(options =>
-                {
-                    options.SetDbStatementForText = true;
-                })
+                .AddNpgsql()
                 .AddSource(serviceName)
                 .AddSource("MassTransit")
                 .AddOtlpExporter(options =>
@@ -31,9 +33,7 @@ public static class OpenTelemetryConfig
                     options.Protocol = OtlpExportProtocol.Grpc;
                 }))
             .WithMetrics(metrics => metrics
-                .AddAspNetCoreInstrumentation()
-                .AddRuntimeInstrumentation()
-                .AddPrometheusExporter());
+                .AddRuntimeInstrumentation());
 
         services.AddLogging(logging => logging
             .AddOpenTelemetry(options =>
@@ -57,12 +57,5 @@ public static class OpenTelemetryConfig
             }));
 
         return services;
-    }
-
-    public static WebApplication UseOpenTelemetry(this WebApplication app)
-    {
-        app.UseOpenTelemetryPrometheusScrapingEndpoint();
-
-        return app;
     }
 }

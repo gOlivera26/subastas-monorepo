@@ -1,7 +1,11 @@
 using MassTransit;
+using PortalSubastas.Audit.Worker;
 using PortalSubastas.Audit.Worker.Consumers;
+using PortalSubastas.Audit.Worker.Config;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddOpenTelemetryTracing(builder.Configuration);
 
 builder.Services.AddMassTransit(x =>
 {
@@ -29,6 +33,8 @@ builder.Services.AddMassTransit(x =>
         });
     });
 });
+
+builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
 host.Run();
