@@ -16,3 +16,8 @@ global using MassTransit;
 global using PortalSubastas.Providers.Application.ResponseDto.Common;
 global using PortalSubastas.Providers.Application.Services.Interfaces;
 global using PortalSubastas.Providers.Domain.Models;
+global using OpenTelemetry.Exporter;
+global using OpenTelemetry.Logs;
+global using OpenTelemetry.Metrics;
+global using OpenTelemetry.Resources;
+global using OpenTelemetry.Trace;

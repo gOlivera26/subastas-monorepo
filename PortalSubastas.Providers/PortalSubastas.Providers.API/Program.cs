@@ -8,9 +8,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddConfig(builder.Configuration);
 
+builder.Services.AddOpenTelemetryTracing(builder.Configuration);
+
 var app = builder.Build();
 
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
+app.UseOpenTelemetry();
 
 if (app.Environment.IsDevelopment())
 {
