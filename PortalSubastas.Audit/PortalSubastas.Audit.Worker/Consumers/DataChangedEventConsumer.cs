@@ -33,7 +33,8 @@ public class DataChangedEventConsumer : IConsumer<DataChangedEvent>
                 (@fechaHora, @idUsuario, @tabla, @registroId, @operacion, @valoresAnteriores::jsonb, @valoresNuevos::jsonb)";
 
         await using var cmd = new NpgsqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("fechaHora", ev.OccurredAt);
+        var fechaHora = DateTime.SpecifyKind(ev.OccurredAt, DateTimeKind.Local);
+        cmd.Parameters.AddWithValue("fechaHora", fechaHora);
         cmd.Parameters.AddWithValue("idUsuario", ev.UserId ?? (object)DBNull.Value);
         cmd.Parameters.AddWithValue("tabla", ev.TableName);
         cmd.Parameters.AddWithValue("registroId", ev.RecordId);

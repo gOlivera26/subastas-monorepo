@@ -14,17 +14,20 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
 {
     private new readonly PortalSubastasContext _context;
     private readonly ISubastaNotificationService _notificationService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public OfertaSubastaService(
         PortalSubastasContext context,
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
-        ISubastaNotificationService notificationService)
+        ISubastaNotificationService notificationService,
+        IPublishEndpoint publishEndpoint)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _notificationService = notificationService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<List<OfertaItemResponseDto>>> ProcesarOfertasAsync(int idCotizacion, List<OfertaItemRequestDto> ofertas)
@@ -230,6 +233,9 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
             }
 
             await _context.SaveChangesAsync();
+
+            await PublishSystemLogAsync(_publishEndpoint, "OFERTAS_PROCESADAS", "LICITACIONES",
+                new { IdCotizacion = idCotizacion, IdProveedor = idProveedor.Value, OfertasRecibidas = ofertasValidas.Count, SubastaCerradaPorTope = subastaCerradaPorTope, Prorrogada = prorrogada });
 
             // 3. Notificaciones SignalR
             foreach (var ov in ofertasValidas)

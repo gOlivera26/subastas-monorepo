@@ -16,6 +16,7 @@ public class GarantiaService : BaseService, IGarantiaService
     private new readonly PortalSubastasContext _context;
     private readonly IFileStorageService _fileStorageService;
     private readonly IConfiguration _configuration;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public GarantiaService(
         PortalSubastasContext context,
@@ -23,12 +24,14 @@ public class GarantiaService : BaseService, IGarantiaService
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
         IFileStorageService fileStorageService,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IPublishEndpoint publishEndpoint)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _fileStorageService = fileStorageService;
         _configuration = configuration;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<List<GarantiaResponseDto>>> GetByCotizacionAsync(int idCotizacion, int? idProveedor)
@@ -79,6 +82,8 @@ public class GarantiaService : BaseService, IGarantiaService
         _context.TGarantiasSubastas.Add(entity);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "GARANTIA_SUBIDA", "LICITACIONES", new { entity.IdGarantia, entity.IdCotizacion, entity.IdProveedor });
+
         return Ok(_mapper.Map<GarantiaResponseDto>(entity));
     }
 
@@ -91,6 +96,9 @@ public class GarantiaService : BaseService, IGarantiaService
         // string bucketName = _configuration["CloudflareR2:BucketName"] ?? "subasta-electronica";
         // await _fileStorageService.DeleteFileAsync(entity.UrlArchivo, bucketName);
 
-        return await DeleteAsync(entity, _context);
+        var result = await DeleteAsync(entity, _context);
+        if (result.Success == true)
+            await PublishSystemLogAsync(_publishEndpoint, "GARANTIA_ELIMINADA", "LICITACIONES", new { entity.IdGarantia, entity.IdCotizacion });
+        return result;
     }
 }

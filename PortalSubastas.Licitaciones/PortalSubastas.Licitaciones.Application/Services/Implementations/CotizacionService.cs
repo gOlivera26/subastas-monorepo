@@ -9,11 +9,13 @@ namespace PortalSubastas.Licitaciones.Application.Services.Implementations;
 public class CotizacionService : BaseService, ICotizacionService
 {
     private readonly PortalSubastasContext _context;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public CotizacionService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache)
+    public CotizacionService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache, IPublishEndpoint publishEndpoint)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<List<CotizacionResponseDto>>> GetAllAsync(int? idVigencia)
@@ -172,6 +174,8 @@ public class CotizacionService : BaseService, ICotizacionService
         _context.TCotizaciones.Add(entity);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_CREADA", "LICITACIONES", new { entity.NroCotizacion, entity.IdCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -191,6 +195,9 @@ public class CotizacionService : BaseService, ICotizacionService
             PrepareAuditableEntity(entity.Especificacion, isNew: false);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_MODIFICADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -206,6 +213,9 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity, isNew: false, isDeleted: true);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_ANULADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(true);
     }
 
@@ -224,6 +234,9 @@ public class CotizacionService : BaseService, ICotizacionService
         entity.IdEstado = 39; // EnviadaPendiente (publicada)
         PrepareAuditableEntity(entity, isNew: false);
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PUBLICADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -243,6 +256,9 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity, isNew: false);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_FINALIZADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -261,6 +277,9 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity, isNew: false);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_DESISTIDA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -384,6 +403,8 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity.Especificacion, isNew: false);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PRORROGADA", "LICITACIONES", new { entity.IdCotizacion, Minutos = minutos, NuevaFechaFin = entity.Especificacion?.FechaFinalizacionSubasta });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -403,6 +424,8 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(participacion, isNew: false);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "PROVEEDOR_DESISTE_SUBASTA", "LICITACIONES", new { IdCotizacion = idCotizacion, IdProveedor = idProveedor });
 
         return Ok(true);
     }

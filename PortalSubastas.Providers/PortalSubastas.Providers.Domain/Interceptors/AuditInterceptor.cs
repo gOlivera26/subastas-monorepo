@@ -1,5 +1,8 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
-namespace PortalSubastas.Licitaciones.Domain.Interceptors;
+
+
+namespace PortalSubastas.Providers.Domain.Interceptors;
 
 public class AuditInterceptor : SaveChangesInterceptor
 {

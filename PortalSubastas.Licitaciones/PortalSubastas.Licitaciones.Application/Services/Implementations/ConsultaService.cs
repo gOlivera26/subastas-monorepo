@@ -14,17 +14,20 @@ public class ConsultaService : BaseService, IConsultaService
 {
     private new readonly PortalSubastasContext _context;
     private readonly ISubastaNotificationService _notificationService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public ConsultaService(
         PortalSubastasContext context,
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
-        ISubastaNotificationService notificationService)
+        ISubastaNotificationService notificationService,
+        IPublishEndpoint publishEndpoint)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _notificationService = notificationService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<List<ConsultaResponseDto>>> GetConsultasAsync(int idCotizacion)
@@ -64,6 +67,8 @@ public class ConsultaService : BaseService, IConsultaService
         _context.TMensajes.Add(entity);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "PREGUNTA_REALIZADA", "LICITACIONES", new { IdCotizacion = idCotizacion, IdProveedor = idProveedor, IdMensaje = entity.IdMensaje });
+
         var resultDto = _mapper.Map<ConsultaResponseDto>(entity);
 
         // 3. Notificar por SignalR a todos en la sala "chat_{id}"
@@ -89,6 +94,8 @@ public class ConsultaService : BaseService, IConsultaService
         mensaje.UsuarioRespuesta = GetCurrentUsername();
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "PREGUNTA_RESPONDIDA", "LICITACIONES", new { IdCotizacion = idCotizacion, IdMensaje = idMensaje, RespondidoPor = GetCurrentUsername() });
 
         var resultDto = _mapper.Map<ConsultaResponseDto>(mensaje);
 

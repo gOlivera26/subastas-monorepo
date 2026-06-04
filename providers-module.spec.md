@@ -348,3 +348,24 @@ sequenceDiagram
 - **AFIP Service**: Actualmente es un **mock**. La integración real con ARCA requiere certificado digital `.pfx` (ver TODO en `AfipService.cs`).
 - **AutoMapper**: Los mapeos están en `RubroProfile.cs`, `ProviderProfile.cs`, `DomicilioProfile.cs`.
 - **Árbol de rubros**: El endpoint `/tree` devuelve una estructura recursiva con máximo 3 niveles de profundidad.
+
+### Auditoría (AuditInterceptor + PublishSystemLogAsync)
+
+- **AuditInterceptor**: Interceptor de EF Core que captura automáticamente todos los cambios (INSERT, UPDATE, DELETE) y publica `DataChangedEvent` vía MassTransit sin código manual en cada servicio.
+- **PublishSystemLogAsync**: Método en `BaseService` que publica `SystemLogEvent` con el módulo `"PROVIDERS"`, la acción, y detalles JSONB.
+
+**Acciones de auditoría registradas (11):**
+
+| Acción | Servicio | Trigger |
+|--------|----------|---------|
+| `PROVEEDOR_CREADO` | ProviderService | Crear proveedor |
+| `PROVEEDOR_ACTUALIZADO` | ProviderService | Actualizar proveedor |
+| `RUBRO_VINCULADO` | ProviderService | Vincular rubro a proveedor |
+| `RUBRO_DESVINCULADO` | ProviderService | Desvincular rubro de proveedor |
+| `CONSTANCIA_AFIP_SUBIDA` | ProviderService | Subir constancia AFIP a R2 |
+| `RUBRO_CREADO` | RubroService | Crear rubro |
+| `RUBRO_ACTUALIZADO` | RubroService | Actualizar rubro |
+| `RUBRO_ELIMINADO` | RubroService | Eliminar rubro (soft delete) |
+| `DOMICILIO_CREADO` | DomicilioService | Crear domicilio |
+| `DOMICILIO_ACTUALIZADO` | DomicilioService | Actualizar domicilio |
+| `DOMICILIO_ELIMINADO` | DomicilioService | Eliminar domicilio (soft delete) |
