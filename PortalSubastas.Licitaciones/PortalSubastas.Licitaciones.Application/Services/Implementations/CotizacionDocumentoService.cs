@@ -15,6 +15,7 @@ namespace PortalSubastas.Licitaciones.Application.Services.Implementations
         private new readonly PortalSubastasContext _context;
         private readonly IFileStorageService _fileStorageService;
         private readonly IConfiguration _configuration;
+        private readonly IPublishEndpoint _publishEndpoint;
 
         public CotizacionDocumentoService(
             PortalSubastasContext context,
@@ -22,12 +23,14 @@ namespace PortalSubastas.Licitaciones.Application.Services.Implementations
             IHttpContextAccessor httpContextAccessor,
             IMemoryCache cache,
             IFileStorageService fileStorageService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IPublishEndpoint publishEndpoint)
             : base(context, mapper, httpContextAccessor, cache)
         {
             _context = context;
             _fileStorageService = fileStorageService;
             _configuration = configuration;
+            _publishEndpoint = publishEndpoint;
         }
 
         public async Task<OperationResponse<List<CotizacionDocumentoResponseDto>>> GetByCotizacionAsync(int idCotizacion)
@@ -68,6 +71,8 @@ namespace PortalSubastas.Licitaciones.Application.Services.Implementations
             _context.TCotizacionDocumentos.Add(entity);
             await _context.SaveChangesAsync();
 
+            await PublishSystemLogAsync(_publishEndpoint, "PLIEGO_SUBIDO", "LICITACIONES", new { entity.IdCotDocumento, entity.IdCotizacion, entity.TipoDocumento, entity.NombreArchivo });
+
             return Ok(_mapper.Map<CotizacionDocumentoResponseDto>(entity));
         }
 
@@ -76,7 +81,10 @@ namespace PortalSubastas.Licitaciones.Application.Services.Implementations
             var entity = await _context.TCotizacionDocumentos.FindAsync(id);
             if (entity == null) return NotFound<bool>();
 
-            return await DeleteAsync(entity, _context);
+            var result = await DeleteAsync(entity, _context);
+            if (result.Success == true)
+                await PublishSystemLogAsync(_publishEndpoint, "PLIEGO_ELIMINADO", "LICITACIONES", new { entity.IdCotDocumento, entity.IdCotizacion });
+            return result;
         }
     }
 }

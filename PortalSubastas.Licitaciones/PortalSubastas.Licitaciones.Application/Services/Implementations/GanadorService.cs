@@ -9,11 +9,13 @@ namespace PortalSubastas.Licitaciones.Application.Services.Implementations;
 public class GanadorService : BaseService, IGanadorService
 {
     private readonly PortalSubastasContext _context;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public GanadorService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache)
+    public GanadorService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache, IPublishEndpoint publishEndpoint)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<List<GanadorResponseDto>>> GetAllAsync(int idCotizacion)
@@ -32,6 +34,9 @@ public class GanadorService : BaseService, IGanadorService
         PrepareAuditableEntity(entity, isNew: true);
         _context.TGanadores.Add(entity);
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "GANADOR_REGISTRADO", "LICITACIONES", new { entity.IdGanador, entity.IdCotizacion, entity.MontoGanador });
+
         return Ok(_mapper.Map<GanadorResponseDto>(entity));
     }
 
@@ -39,6 +44,9 @@ public class GanadorService : BaseService, IGanadorService
     {
         var entity = await _context.TGanadores.FindAsync(id);
         if (entity == null) return NotFound<bool>();
-        return await DeleteAsync(entity, _context);
+        var result = await DeleteAsync(entity, _context);
+        if (result.Success == true)
+            await PublishSystemLogAsync(_publishEndpoint, "GANADOR_ELIMINADO", "LICITACIONES", new { entity.IdGanador, entity.IdCotizacion });
+        return result;
     }
 }

@@ -1,4 +1,7 @@
-﻿AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+﻿TimeZoneInfo.ClearCachedData();
+Environment.SetEnvironmentVariable("TZ", "America/Argentina/Buenos_Aires");
+
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 

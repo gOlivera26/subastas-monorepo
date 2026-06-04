@@ -175,7 +175,7 @@ public abstract class BaseService
             Module: module,
             Details: JsonSerializer.Serialize(details),
             IpAddress: ipAddress,
-            OccurredAt: DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Unspecified)
+            OccurredAt: TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires"))
         );
 
         await publishEndpoint.Publish(logEvent);

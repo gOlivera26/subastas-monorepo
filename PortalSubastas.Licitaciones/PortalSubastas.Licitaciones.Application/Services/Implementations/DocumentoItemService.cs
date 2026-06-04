@@ -16,6 +16,7 @@ public class DocumentoItemService : BaseService, IDocumentoItemService
     private new readonly PortalSubastasContext _context;
     private readonly IFileStorageService _fileStorageService;
     private readonly IConfiguration _configuration;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public DocumentoItemService(
         PortalSubastasContext context,
@@ -23,12 +24,14 @@ public class DocumentoItemService : BaseService, IDocumentoItemService
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
         IFileStorageService fileStorageService,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IPublishEndpoint publishEndpoint)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _fileStorageService = fileStorageService;
         _configuration = configuration;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<List<DocumentoItemResponseDto>>> GetByItemAsync(int idCotizacion, int? idCotizacionDetalle, int? idRenglon)
@@ -92,6 +95,8 @@ public class DocumentoItemService : BaseService, IDocumentoItemService
         _context.TDocumentoItemProveedores.Add(entity);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "DOCUMENTO_ITEM_SUBIDO", "LICITACIONES", new { entity.IdDocItem, entity.IdCotizacion, entity.IdProveedor, entity.NombreArchivo });
+
         return Ok(_mapper.Map<DocumentoItemResponseDto>(entity));
     }
 
@@ -109,7 +114,10 @@ public class DocumentoItemService : BaseService, IDocumentoItemService
         if (entity.Enviado)
             return BadRequest<bool>("No se puede eliminar un documento que ya fue enviado definitivamente.");
 
-        return await DeleteAsync(entity, _context);
+        var result = await DeleteAsync(entity, _context);
+        if (result.Success == true)
+            await PublishSystemLogAsync(_publishEndpoint, "DOCUMENTO_ITEM_ELIMINADO", "LICITACIONES", new { entity.IdDocItem, entity.IdCotizacion });
+        return result;
     }
 
     public async Task<OperationResponse<bool>> EnviarDocumentacionDefinitivaAsync(int idCotizacion, int? idCotizacionDetalle, int? idRenglon)
@@ -137,6 +145,9 @@ public class DocumentoItemService : BaseService, IDocumentoItemService
         }
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "DOCUMENTACION_DEFINITIVA_ENVIADA", "LICITACIONES", new { IdCotizacion = idCotizacion, IdProveedor = idProveedor.Value, DocumentosEnviados = documentos.Count });
+
         return Ok(true);
     }
 }
