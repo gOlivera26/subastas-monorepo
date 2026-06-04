@@ -407,6 +407,64 @@ public class CotizacionService : BaseService, ICotizacionService
         return Ok(true);
     }
 
+    public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(int idCotizacion)
+    {
+        var cotizacion = await _context.TCotizaciones
+            .Include(c => c.Especificacion)
+            .Include(c => c.Detalles)
+            .FirstOrDefaultAsync(c => c.IdCotizacion == idCotizacion);
+
+        if (cotizacion == null) return NotFound<MetricasAhorroDto>();
+
+        bool isRenglon = cotizacion.Especificacion?.CriterioAdjudicacion == 1;
+        decimal presupuestoBaseTotal = 0;
+        decimal mejorOfertaTotal = 0;
+
+        if (isRenglon)
+        {
+            var renglonesIds = cotizacion.Detalles.Where(d => d.IdRenglon.HasValue).Select(d => d.IdRenglon.Value).Distinct().ToList();
+
+            foreach (var idRenglon in renglonesIds)
+            {
+                decimal baseRenglon = cotizacion.Detalles.Where(d => d.IdRenglon == idRenglon).Sum(d => d.ImporteBase * d.Cantidad);
+                presupuestoBaseTotal += baseRenglon;
+                
+                var minOferta = await _context.TOfertasSubastas
+                    .Where(o => o.IdRenglon == idRenglon && o.FecBaja == null)
+                    .MinAsync(o => (decimal?)o.Monto);
+
+                mejorOfertaTotal += minOferta ?? baseRenglon;
+            }
+        }
+        else
+        {
+            foreach (var detalle in cotizacion.Detalles)
+            {
+                decimal baseItem = detalle.ImporteBase * detalle.Cantidad;
+                presupuestoBaseTotal += baseItem;
+
+                var minOferta = await _context.TOfertasSubastas
+                    .Where(o => o.IdCotizacionDetalle == detalle.IdCotizacionDetalle && o.FecBaja == null)
+                    .MinAsync(o => (decimal?)o.Monto);
+
+                mejorOfertaTotal += (minOferta ?? detalle.ImporteBase) * detalle.Cantidad;
+            }
+        }
+
+        decimal ahorroPorcentaje = 0;
+        if (presupuestoBaseTotal > 0)
+        {
+            ahorroPorcentaje = ((presupuestoBaseTotal - mejorOfertaTotal) / presupuestoBaseTotal) * 100m;
+        }
+
+        return Ok(new MetricasAhorroDto
+        {
+            PresupuestoBase = Math.Round(presupuestoBaseTotal, 2),
+            MejorOfertaFinal = Math.Round(mejorOfertaTotal, 2),
+            AhorroPorcentaje = Math.Round(ahorroPorcentaje, 2)
+        });
+    }
+
     private string GetEstadoNombre(int idEstado) => idEstado switch
     {
         4 => "Generado",
