@@ -179,6 +179,7 @@ public static class ServicesConfig
         services.AddScoped<IConsultaService, ConsultaService>();
         services.AddScoped<IFileStorageService, CloudflareR2StorageService>();
         services.AddScoped<ICotizacionDocumentoService, CotizacionDocumentoService>();
+        services.AddScoped<IDocumentoItemService, DocumentoItemService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)

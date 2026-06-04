@@ -43,6 +43,7 @@ public partial class PortalSubastasContext : DbContext
     public virtual DbSet<TMensaje> TMensajes { get; set; }
     public virtual DbSet<TGarantiaSubasta> TGarantiasSubastas { get; set; }
     public virtual DbSet<TCotizacionDocumento> TCotizacionDocumentos { get; set; }
+    public virtual DbSet<TDocumentoItemProveedor> TDocumentoItemProveedores { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -804,6 +805,33 @@ public partial class PortalSubastasContext : DbContext
             entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
 
             entity.HasOne(d => d.IdCotizacionNavigation).WithMany().HasForeignKey(d => d.IdCotizacion).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TDocumentoItemProveedor>(entity =>
+        {
+            entity.HasKey(e => e.IdDocItem).HasName("t_documento_item_proveedor_pkey");
+            entity.ToTable("t_documento_item_proveedor", "negocio");
+
+            entity.Property(e => e.IdDocItem).HasColumnName("id_doc_item");
+            entity.Property(e => e.IdCotizacion).HasColumnName("id_cotizacion");
+            entity.Property(e => e.IdCotizacionDetalle).HasColumnName("id_cotizacion_detalle");
+            entity.Property(e => e.IdRenglon).HasColumnName("id_renglon");
+            entity.Property(e => e.IdProveedor).HasColumnName("id_proveedor");
+
+            entity.Property(e => e.NombreArchivo).IsRequired().HasMaxLength(255).HasColumnName("nombre_archivo");
+            entity.Property(e => e.UrlArchivo).IsRequired().HasMaxLength(500).HasColumnName("url_archivo");
+            entity.Property(e => e.Enviado).HasDefaultValue(false).HasColumnName("enviado");
+
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod").IsRequired(false);
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja").IsRequired(false);
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+
+            entity.HasOne(d => d.IdCotizacionNavigation).WithMany().HasForeignKey(d => d.IdCotizacion).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(d => d.IdCotizacionDetalleNavigation).WithMany().HasForeignKey(d => d.IdCotizacionDetalle).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(d => d.IdRenglonNavigation).WithMany().HasForeignKey(d => d.IdRenglon).OnDelete(DeleteBehavior.SetNull);
         });
 
         OnModelCreatingPartial(modelBuilder);

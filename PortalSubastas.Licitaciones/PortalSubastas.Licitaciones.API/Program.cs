@@ -28,6 +28,8 @@ builder.Services.AddOpenTelemetryTracing(builder.Configuration);
 builder.Services.AddSignalR();
 builder.Services.AddHealthChecks();
 
+builder.Services.AddHostedService<PortalSubastas.Licitaciones.API.Services.SubastaCloserWorker>();
+
 var app = builder.Build();
 
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();

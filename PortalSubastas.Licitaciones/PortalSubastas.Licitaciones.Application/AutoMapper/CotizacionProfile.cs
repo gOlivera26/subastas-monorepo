@@ -28,5 +28,8 @@ public class CotizacionProfile : Profile
             .ForMember(d => d.FechaPregunta, o => o.MapFrom(s => s.FecIng));
 
         CreateMap<TCotizacionDocumento, CotizacionDocumentoResponseDto>();
+
+        CreateMap<TDocumentoItemProveedor, DocumentoItemResponseDto>()
+            .ForMember(d => d.FechaCarga, o => o.MapFrom(s => s.FecIng));
     }
 }

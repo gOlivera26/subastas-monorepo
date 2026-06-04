@@ -35,4 +35,12 @@ public class OfertaSubastaController : BaseController
         var result = await _ofertaService.GetHistorialAsync(idCotizacion);
         return Return(result);
     }
+
+    [HttpGet("MisOfertas")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMisOfertas()
+    {
+        var result = await _ofertaService.GetMisOfertasAsync();
+        return Return(result);
+    }
 }
