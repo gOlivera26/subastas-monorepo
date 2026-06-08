@@ -13,7 +13,8 @@ public static class OpenTelemetryConfig
     {
         var serviceName = configuration["OTEL_SERVICE_NAME"] ?? "PortalSubastas.Audit-Worker";
         var otlpEndpoint = configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "http://localhost:4317";
-        var environment = configuration["DOTNET_ENVIRONMENT"] ?? "Development"; 
+        var environment = configuration["DOTNET_ENVIRONMENT"] ?? "Development";
+
         services.AddOpenTelemetry()
             .ConfigureResource(resource => resource
                 .AddService(serviceName: serviceName)
@@ -33,7 +34,13 @@ public static class OpenTelemetryConfig
                     options.Protocol = OtlpExportProtocol.Grpc;
                 }))
             .WithMetrics(metrics => metrics
-                .AddRuntimeInstrumentation());
+                .AddRuntimeInstrumentation()
+                .AddMeter("MassTransit")
+                .AddOtlpExporter(options =>
+                {
+                    options.Endpoint = new Uri(otlpEndpoint);
+                    options.Protocol = OtlpExportProtocol.Grpc;
+                }));
 
         services.AddLogging(logging => logging
             .AddOpenTelemetry(options =>
