@@ -47,6 +47,8 @@ public partial class PortalSubastasContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasPostgresExtension("vector");
+
         modelBuilder.Entity<TCatalogosBien>(entity =>
         {
             entity.HasKey(e => e.IdItem).HasName("t_catalogos_bien_pkey");

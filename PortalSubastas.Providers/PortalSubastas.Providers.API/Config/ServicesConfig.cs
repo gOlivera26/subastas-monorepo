@@ -46,7 +46,7 @@ public static class ServicesConfig
         services.AddDbContext<ProvidersContext>((sp, options) =>
         {
             var interceptor = sp.GetRequiredService<AuditInterceptor>();
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"), o => o.UseVector())
                    .AddInterceptors(interceptor);
         });
 

@@ -53,7 +53,7 @@ public static class ServicesConfig
         services.AddDbContext<PortalSubastasContext>((sp, options) =>
         {
             var auditInterceptor = sp.GetRequiredService<AuditInterceptor>();
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"), o => o.UseVector())
                    .AddInterceptors(auditInterceptor);
         });
 

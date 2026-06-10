@@ -34,14 +34,17 @@ public static class ServicesConfig
         services.AddJwt(configuration);
 
         services.BindAppSettings(configuration);
-        services.AddAutoMapper(typeof(PortalSubastas.Identity.Application.AutoMapper.UserProfile).Assembly);
+        services.AddAutoMapper(cfg =>
+        {
+            cfg.AddMaps(typeof(PortalSubastas.Identity.Application.AutoMapper.UserProfile).Assembly);
+        });
 
         services.AddScoped<PortalSubastas.Identity.Domain.Interceptors.AuditInterceptor>();
 
         services.AddDbContext<PortalSubastasContext>((sp, options) =>
         {
             var interceptor = sp.GetRequiredService<PortalSubastas.Identity.Domain.Interceptors.AuditInterceptor>();
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"), o => o.UseVector())
                    .AddInterceptors(interceptor); //intercepto solicitudes para auditar
         });
 
