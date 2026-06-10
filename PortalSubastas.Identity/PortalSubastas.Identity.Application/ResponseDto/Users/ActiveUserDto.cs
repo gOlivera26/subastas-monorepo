@@ -10,5 +10,13 @@
         public string TipoUsuario { get; set; } = string.Empty;
         public string EntidadRepresentada { get; set; } = string.Empty;
         public string Estado { get; set; } = string.Empty;
+        public List<UserEntidadDto> Entidades { get; set; } = new();
+    }
+
+    public class UserEntidadDto
+    {
+        public int IdEntidad { get; set; }
+        public string Tipo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
     }
 }

@@ -7,5 +7,6 @@
         Task<OperationResponse<ProfileResponseDto>> UpdateProfileAsync(UpdateProfileRequestDto request);
         Task<OperationResponse<ProfileResponseDto>> GetProfileAsync();
         Task<OperationResponse<bool>> ChangePasswordAsync(ChangePasswordRequestDto request);
+        Task<OperationResponse<LoginResponseDto>> SwitchContextAsync(SwitchContextRequestDto request);
     }
 }

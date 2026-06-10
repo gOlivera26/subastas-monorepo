@@ -111,4 +111,17 @@ public class AuthController : BaseController
         var result = await _authService.UpdateProfileAsync(request);
         return Return(result);
     }
+
+    /// <summary>
+    /// Cambia el contexto activo del usuario y emite un nuevo JWT.
+    /// </summary>
+    [HttpPost("switch-context")]
+    [Authorize]
+    [ProducesResponseType(typeof(OperationResponse<LoginResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperationResponse<LoginResponseDto>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SwitchContext([FromBody] SwitchContextRequestDto request)
+    {
+        var result = await _authService.SwitchContextAsync(request);
+        return Return(result);
+    }
 }

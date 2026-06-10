@@ -23,7 +23,8 @@ public class AuthService : BaseService, IAuthService
     public async Task<OperationResponse<LoginResponseDto>> LoginAsync(LoginRequestDto request)
     {
         var usuario = await _identityContext.TUsuarios
-            .Include(u => u.IdPersonaNavigation)
+            .Include(u => u.IdPersonaNavigation).ThenInclude(p => p.TProveedoresRepresentantes).ThenInclude(pr => pr.IdProveedorNavigation)
+            .Include(u => u.TJurisdiccionesUsuarios).ThenInclude(j => j.IdOrganizacionNavigation)
             .Include(u => u.IdRolNavigation)
             .Include(u => u.IdEstadoNavigation)
             .FirstOrDefaultAsync(u => u.EmailLogin == request.Email);
@@ -39,7 +40,7 @@ public class AuthService : BaseService, IAuthService
 
         var modulosPermitidos = await _identityContext.TRolesModulos
             .Include(rm => rm.IdModuloNavigation)
-            .Where(rm => rm.IdRol == usuario.IdRol)
+            .Where(rm => rm.IdRol == usuario.IdRol && rm.FecBaja == null)
             .Select(rm => new ModuloDto
             {
                 Id = rm.IdModuloNavigation.Id,
@@ -51,7 +52,6 @@ public class AuthService : BaseService, IAuthService
             })
             .ToListAsync();
 
-        // Incluir módulos que tengan páginas asignadas aunque no estén en TRolesModulo
         var modulosDesdePaginas = await _identityContext.TRolesPaginas
             .Include(rp => rp.IdPaginaNavigation).ThenInclude(p => p.IdModuloNavigation)
             .Where(rp => rp.IdRol == usuario.IdRol)
@@ -68,13 +68,18 @@ public class AuthService : BaseService, IAuthService
             })
             .ToListAsync();
 
-        // Merge sin duplicados por Id
         modulosPermitidos = modulosPermitidos
             .UnionBy(modulosDesdePaginas, m => m.Id)
             .OrderBy(m => modulosPermitidos.Concat(modulosDesdePaginas).ToList().IndexOf(m))
             .ToList();
 
-        var token = GenerarJwtToken(usuario);
+        var entidades = new List<EntidadDto>();
+        foreach (var j in usuario.TJurisdiccionesUsuarios.Where(x => x.FecBaja == null))
+            entidades.Add(new EntidadDto { Id = j.IdOrganizacion, Tipo = "GESTOR", Nombre = j.IdOrganizacionNavigation.Nombre });
+        foreach (var p in usuario.IdPersonaNavigation.TProveedoresRepresentantes.Where(x => x.FecBaja == null))
+            entidades.Add(new EntidadDto { Id = p.IdProveedor, Tipo = "PROVEEDOR", Nombre = p.IdProveedorNavigation.RazonSocial });
+
+        var token = GenerarJwtToken(usuario); // Llama por defecto al primer contexto
 
         usuario.UltimoAcceso = DateTime.UtcNow;
         _identityContext.TUsuarios.Update(usuario);
@@ -87,6 +92,7 @@ public class AuthService : BaseService, IAuthService
             Email = usuario.EmailLogin,
             Rol = usuario.IdRolNavigation.Nombre,
             Modulos = modulosPermitidos,
+            Entidades = entidades,
             Paginas = await _identityContext.TRolesPaginas
                 .Include(rp => rp.IdPaginaNavigation).ThenInclude(p => p.IdModuloNavigation)
                 .Where(rp => rp.IdRol == usuario.IdRol)
@@ -98,12 +104,50 @@ public class AuthService : BaseService, IAuthService
                     KeyName = rp.IdPaginaNavigation.KeyName,
                     Titulo = rp.IdPaginaNavigation.Titulo,
                     RutaFrontend = rp.IdPaginaNavigation.RutaFrontend
-                })
-                .ToListAsync()
+                }).ToListAsync()
         };
 
-        await PublishSystemLogAsync(_publishEndpoint, "INICIO_SESION", "IAM",
-    new { Mensaje = $"El usuario {usuario.EmailLogin} inició sesión exitosamente." });
+        await PublishSystemLogAsync(_publishEndpoint, "INICIO_SESION", "IAM", new { Mensaje = $"El usuario {usuario.EmailLogin} inició sesión exitosamente." });
+
+        return Ok(response);
+    }
+
+    public async Task<OperationResponse<LoginResponseDto>> SwitchContextAsync(SwitchContextRequestDto request)
+    {
+        var userId = GetCurrentUserIdGuid();
+        if (userId == null) return Unauthorized<LoginResponseDto>();
+
+        var usuario = await _identityContext.TUsuarios
+            .Include(u => u.IdPersonaNavigation)
+            .Include(u => u.IdRolNavigation)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (usuario == null) return NotFound<LoginResponseDto>();
+
+        // Validar que realmente pertenece a esa entidad
+        if (request.TipoEntidad == "GESTOR")
+        {
+            var existe = await _identityContext.TJurisdiccionesUsuarios.AnyAsync(j => j.IdUsuario == userId && j.IdOrganizacion == request.IdEntidad && j.FecBaja == null);
+            if (!existe) return BadRequest<LoginResponseDto>("No perteneces a esta organización.");
+        }
+        else if (request.TipoEntidad == "PROVEEDOR")
+        {
+            var existe = await _identityContext.TProveedoresRepresentantes.AnyAsync(p => p.IdPersona == usuario.IdPersona && p.IdProveedor == request.IdEntidad && p.FecBaja == null);
+            if (!existe) return BadRequest<LoginResponseDto>("No eres representante de este proveedor.");
+        }
+
+        int? idOrg = request.TipoEntidad == "GESTOR" ? request.IdEntidad : null;
+        int? idProv = request.TipoEntidad == "PROVEEDOR" ? request.IdEntidad : null;
+
+        var token = GenerarJwtToken(usuario, idOrg, idProv);
+
+        var response = new LoginResponseDto
+        {
+            Token = token,
+            NombreUsuario = $"{usuario.IdPersonaNavigation.Nombre} {usuario.IdPersonaNavigation.Apellido}",
+            Email = usuario.EmailLogin,
+            Rol = usuario.IdRolNavigation.Nombre
+        };
 
         return Ok(response);
     }
@@ -251,13 +295,11 @@ public class AuthService : BaseService, IAuthService
         return Ok(_mapper.Map<ProfileResponseDto>(usuario));
     }
 
-    private string GenerarJwtToken(TUsuario usuario)
+
+    private string GenerarJwtToken(TUsuario usuario, int? idOrganizacionContexto = null, int? idProveedorContexto = null)
     {
         var jwtSettings = _configuration.GetSection("Jwt");
         var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]!);
-
-        var organizacionPrincipal = _identityContext.TJurisdiccionesUsuarios
-            .FirstOrDefault(j => j.IdUsuario == usuario.Id && j.EsPrincipal == true);
 
         var claims = new List<Claim>
         {
@@ -267,14 +309,37 @@ public class AuthService : BaseService, IAuthService
             new(ClaimTypes.Role, usuario.IdRolNavigation.Nombre)
         };
 
-        if (organizacionPrincipal != null)
-            claims.Add(new Claim("IdOrganizacion", organizacionPrincipal.IdOrganizacion.ToString()));
+        // LÓGICA DE CONTEXTO ESTRICTO (O uno, o el otro)
+        if (idOrganizacionContexto.HasValue)
+        {
+            claims.Add(new Claim("IdOrganizacion", idOrganizacionContexto.Value.ToString()));
+            claims.Add(new Claim("TipoContexto", "GESTOR"));
+        }
+        else if (idProveedorContexto.HasValue)
+        {
+            claims.Add(new Claim("IdProveedor", idProveedorContexto.Value.ToString()));
+            claims.Add(new Claim("TipoContexto", "PROVEEDOR"));
+        }
+        else
+        {
+            var orgPrincipal = _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null && j.EsPrincipal == true)
+                            ?? _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null);
 
-        // Agregar IdProveedor si el usuario es representante de un proveedor
-        var proveedorRepresentante = _identityContext.TProveedoresRepresentantes
-            .FirstOrDefault(pr => pr.IdPersona == usuario.IdPersona);
-        if (proveedorRepresentante != null)
-            claims.Add(new Claim("IdProveedor", proveedorRepresentante.IdProveedor.ToString()));
+            if (orgPrincipal != null)
+            {
+                claims.Add(new Claim("IdOrganizacion", orgPrincipal.IdOrganizacion.ToString()));
+                claims.Add(new Claim("TipoContexto", "GESTOR"));
+            }
+            else
+            {
+                var proveedor = _identityContext.TProveedoresRepresentantes.FirstOrDefault(pr => pr.IdPersona == usuario.IdPersona && pr.FecBaja == null);
+                if (proveedor != null)
+                {
+                    claims.Add(new Claim("IdProveedor", proveedor.IdProveedor.ToString()));
+                    claims.Add(new Claim("TipoContexto", "PROVEEDOR"));
+                }
+            }
+        }
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {

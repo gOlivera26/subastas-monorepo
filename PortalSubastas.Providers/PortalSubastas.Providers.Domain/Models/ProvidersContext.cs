@@ -24,6 +24,8 @@ public partial class ProvidersContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasPostgresExtension("vector");
+
         modelBuilder.Entity<TPersona>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("t_personas_pkey");
