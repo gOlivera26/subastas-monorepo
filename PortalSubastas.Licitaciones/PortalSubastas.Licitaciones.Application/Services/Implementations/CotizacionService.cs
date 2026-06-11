@@ -1,7 +1,10 @@
+using System.Data.Common;
+using Microsoft.Extensions.Logging;
 using PortalSubastas.Licitaciones.Application.RequestDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Reporting;
+using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion.Publica;
 using PortalSubastas.Licitaciones.Application.Services.Interfaces;
 using PortalSubastas.Licitaciones.Domain.Models;
 
@@ -12,6 +15,7 @@ public class CotizacionService : BaseService, ICotizacionService
     private readonly PortalSubastasContext _context;
     private readonly IProviderLookupService _providerLookupService;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<CotizacionService> _logger;
 
     public CotizacionService(
         PortalSubastasContext context,
@@ -19,12 +23,14 @@ public class CotizacionService : BaseService, ICotizacionService
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
         IProviderLookupService providerLookupService,
-        IPublishEndpoint publishEndpoint)
+        IPublishEndpoint publishEndpoint,
+        ILogger<CotizacionService> logger)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _providerLookupService = providerLookupService;
         _publishEndpoint = publishEndpoint;
+        _logger = logger;
     }
 
     public async Task<OperationResponse<List<CotizacionResponseDto>>> GetAllAsync(int? idVigencia)
@@ -64,7 +70,6 @@ public class CotizacionService : BaseService, ICotizacionService
         dto.Estado = GetEstadoNombre(entity.IdEstado);
         dto.Modalidad = entity.Especificacion?.Redeterminacion switch { "1" => "Pública", "0" => "Privada", "2" => "Cerrada", _ => "No definida" };
 
-        // Load Renglones separately (table may not exist yet)
         try
         {
             var renglones = await _context.TCotizacionRenglones
@@ -74,7 +79,6 @@ public class CotizacionService : BaseService, ICotizacionService
         }
         catch { dto.Renglones = new(); }
 
-        // Load Proveedores separately (table may not exist yet)
         try
         {
             var proveedores = await _context.TCotizacionProveedores
@@ -83,8 +87,6 @@ public class CotizacionService : BaseService, ICotizacionService
             dto.Proveedores = _mapper.Map<List<CotizacionProveedorResponseDto>>(proveedores);
         }
         catch { dto.Proveedores = new(); }
-
-        // Populate NItem and NroReserva manually for each detail item
         var itemIds = dto.Detalles.Select(d => d.IdItem).ToList();
         var itemsMap = await _context.TCatalogosBiens
             .Where(i => itemIds.Contains(i.IdItem))
@@ -92,7 +94,6 @@ public class CotizacionService : BaseService, ICotizacionService
 
         var resDetIds = dto.Detalles.Select(d => d.IdReservaDetalle).ToList();
 
-        // MODIFICADO AQUÍ: Traemos NroReserva y también IdMoneda
         var resMap = await _context.TReservaDetalles
             .Include(rd => rd.IdReservaNavigation)
             .Where(rd => resDetIds.Contains(rd.IdReservaDet))
@@ -110,11 +111,10 @@ public class CotizacionService : BaseService, ICotizacionService
             if (resMap.TryGetValue(d.IdReservaDetalle, out var resData))
             {
                 d.NroReserva = resData.NroReserva;
-                d.IdMoneda = resData.IdMoneda; // <--- ASIGNAMOS LA MONEDA
+                d.IdMoneda = resData.IdMoneda; 
             }
         }
 
-        // NUEVO: Asignar la moneda al renglón (tomando la del primer ítem del grupo)
         foreach (var r in dto.Renglones)
         {
             var primerDetalle = dto.Detalles.FirstOrDefault(d => d.IdRenglon == r.IdRenglon);
@@ -805,9 +805,6 @@ public class CotizacionService : BaseService, ICotizacionService
         foreach(var ren in entity.Renglones)
             PrepareAuditableEntity(ren, isNew: true);
 
-        // Link detalle items to renglones using NumeroRenglon from the request.
-        // The frontend sends ren.id as both numeroRenglon and idRenglon,
-        // but the real DB id_renglon is auto-generated. Match by NumeroRenglon.
         if (entity.Renglones.Any())
         {
             var renglonByNro = entity.Renglones.ToDictionary(r => r.NumeroRenglon);
@@ -817,7 +814,7 @@ public class CotizacionService : BaseService, ICotizacionService
                 if (renglonByNro.TryGetValue(nroRenglon, out var ren))
                 {
                     det.IdRenglonNavigation = ren;
-                    det.IdRenglon = null; // EF Core will resolve from navigation
+                    det.IdRenglon = null;
                 }
             }
         }
@@ -838,7 +835,6 @@ public class CotizacionService : BaseService, ICotizacionService
 
         if (entity == null) return NotFound<CotizacionResponseDto>();
 
-        // Logica basica actualización
         _mapper.Map(dto, entity);
         PrepareAuditableEntity(entity, isNew: false);
         
@@ -888,7 +884,89 @@ public class CotizacionService : BaseService, ICotizacionService
 
         await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PUBLICADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
 
+        // Publicar SubastaPublicadaEvent con lista de proveedores activos
+        try
+        {
+            await PublishSubastaPublicadaEventAsync(entity);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ No se pudo publicar SubastaPublicadaEvent para Cotización {IdCotizacion}. El flujo continúa.", id);
+        }
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
+    }
+
+    private async Task PublishSubastaPublicadaEventAsync(TCotizacion entity)
+    {
+        var proveedoresActivos = await _context.TCotizacionProveedores
+            .Where(p => p.IdCotizacion == entity.IdCotizacion && p.FecBaja == null)
+            .ToListAsync();
+
+        if (proveedoresActivos.Count == 0)
+        {
+            _logger.LogInformation("⚠️ No hay proveedores activos para Cotización {IdCotizacion}. No se publica SubastaPublicadaEvent.", entity.IdCotizacion);
+            return;
+        }
+
+        var proveedorIds = proveedoresActivos.Select(p => p.IdProveedor).Distinct().ToList();
+
+        // Resolver emails y nombres desde negocio.t_proveedores
+        var proveedoresInfo = new List<ProveedorInfo>();
+        var dbConnection = _context.Database.GetDbConnection();
+        await dbConnection.OpenAsync();
+
+        try
+        {
+            await using var cmd = dbConnection.CreateCommand();
+            cmd.CommandText = "SELECT id, email_institucional, razon_social FROM negocio.t_proveedores WHERE id = ANY(@ids) AND fec_baja IS NULL";
+            var param = cmd.CreateParameter();
+            param.ParameterName = "ids";
+            param.Value = proveedorIds;
+            cmd.Parameters.Add(param);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var idProv = reader.GetInt32(0);
+                var email = reader.IsDBNull(1) ? null : reader.GetString(1);
+                var nombre = reader.IsDBNull(2) ? null : reader.GetString(2);
+                proveedoresInfo.Add(new ProveedorInfo(idProv, email ?? "", nombre ?? ""));
+            }
+        }
+        finally
+        {
+            // No cerramos la conexión aquí — la maneja EF Core
+        }
+
+        if (proveedoresInfo.Count == 0)
+        {
+            _logger.LogInformation("⚠️ No se encontraron datos de proveedores activos para Cotización {IdCotizacion}.", entity.IdCotizacion);
+            return;
+        }
+
+        string tipoNombre = entity.IdTipoContratacion switch
+        {
+            7 => "Subasta Inversa",
+            9 => "Subasta Directa",
+            13 => "Subasta Inversa Monto Fijo",
+            15 => "Subasta Inversa SEEC",
+            _ => "Subasta"
+        };
+
+        var subastaEvent = new SubastaPublicadaEvent(
+            IdCotizacion: entity.IdCotizacion,
+            NroCotizacion: entity.NroCotizacion,
+            Titulo: entity.Observacion ?? "Subasta " + entity.NroCotizacion,
+            FechaInicio: entity.Especificacion?.FechaInicioSubasta,
+            FechaFin: entity.Especificacion?.FechaFinalizacionSubasta,
+            TipoContratacion: tipoNombre,
+            Proveedores: proveedoresInfo,
+            OccuredOn: DateTime.UtcNow
+        );
+
+        await _publishEndpoint.Publish(subastaEvent);
+        _logger.LogInformation("📧 SubastaPublicadaEvent publicado: Cotización {IdCotizacion}, {Count} proveedores", entity.IdCotizacion, proveedoresInfo.Count);
     }
 
     public async Task<OperationResponse<CotizacionResponseDto>> FinalizarAsync(int id)
@@ -934,7 +1012,6 @@ public class CotizacionService : BaseService, ICotizacionService
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
-    // --- Endpoints Dashboard ---
     private IQueryable<TCotizacion> GetDashboardBaseQuery(int? idVigencia)
     {
         var query = _context.TCotizaciones
@@ -1421,6 +1498,149 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
             AhorroPorcentaje = Math.Round(ahorroPorcentaje, 2)
         });
 
+    }
+
+
+    public async Task<OperationResponse<List<SubastaPublicaListDto>>> GetSubastasPublicasActivasAsync()
+    {
+        var now = DateTime.Now;
+
+        var data = await _context.TCotizaciones
+            .Include(c => c.Especificacion)
+            .Include(c => c.IdUnidadAdmNavigation)
+            .Where(c => c.IdEstado == 39
+                     && c.FecBaja == null
+                     && c.Especificacion.Redeterminacion == "1"
+                     && c.Especificacion.FechaInicioSubasta <= now
+                     && c.Especificacion.FechaFinalizacionSubasta >= now)
+            .OrderBy(c => c.Especificacion.FechaFinalizacionSubasta)
+            .ToListAsync();
+
+        var result = data.Select(c => new SubastaPublicaListDto
+        {
+            IdCotizacion = c.IdCotizacion,
+            NroCotizacion = c.NroCotizacion,
+            Tipo = c.IdTipoContratacion switch
+            {
+                7 => "Subasta Inversa",
+                9 => "Subasta Directa",
+                13 => "Subasta Inversa Monto Fijo",
+                15 => "Subasta Inversa SEEC",
+                _ => "Subasta"
+            },
+            Titulo = c.Observacion ?? "Subasta " + c.NroCotizacion,
+            UnidadAdm = c.IdUnidadAdmNavigation?.NombreUnidadAdm ?? "",
+            FechaFin = c.Especificacion?.FechaFinalizacionSubasta
+        }).ToList();
+
+        return Ok(result);
+    }
+
+    public async Task<OperationResponse<SubastaPublicaDetalleDto>> GetDetalleSubastaPublicaAsync(int idCotizacion)
+    {
+        var entity = await _context.TCotizaciones
+            .Include(c => c.Especificacion)
+            .Include(c => c.Detalles)
+            .Include(c => c.Renglones)
+            .Include(c => c.IdUnidadAdmNavigation)
+            .FirstOrDefaultAsync(c => c.IdCotizacion == idCotizacion
+                                   && c.IdEstado == 39
+                                   && c.FecBaja == null
+                                   && c.Especificacion.Redeterminacion == "1");
+
+        if (entity == null || entity.Especificacion == null)
+            return NotFound<SubastaPublicaDetalleDto>();
+
+        // Build item catalog map for names
+        var itemIds = entity.Detalles.Select(d => d.IdItem).Distinct().ToList();
+        var itemsMap = await _context.TCatalogosBiens
+            .Where(i => itemIds.Contains(i.IdItem))
+            .ToDictionaryAsync(i => i.IdItem, i => i.NItem);
+
+        bool isRenglon = entity.Especificacion.CriterioAdjudicacion == 1;
+        var items = new List<ItemPublicoDto>();
+
+        var todasLasOfertas = await _context.TOfertasSubastas
+            .Where(o => o.IdCotizacion == idCotizacion && o.FecBaja == null)
+            .ToListAsync();
+
+        if (isRenglon)
+        {
+            foreach (var ren in entity.Renglones.Where(r => r.FecBaja == null))
+            {
+                var detallesRenglon = entity.Detalles
+                    .Where(d => d.IdRenglon == ren.IdRenglon && d.FecBaja == null)
+                    .ToList();
+
+                decimal cantidad = detallesRenglon.Sum(d => d.Cantidad);
+                decimal precioBase = detallesRenglon.Sum(d => d.ImporteBase * d.Cantidad);
+
+                // Best offer for this renglon (min for inverse, max for direct)
+                decimal? mejorOferta = null;
+                var ofertasRenglon = todasLasOfertas.Where(o => o.IdRenglon == ren.IdRenglon).ToList();
+                if (ofertasRenglon.Count != 0)
+                {
+                    mejorOferta = entity.IdTipoContratacion == 9
+                        ? ofertasRenglon.Max(o => (decimal?)o.Monto)
+                        : ofertasRenglon.Min(o => (decimal?)o.Monto);
+                }
+
+                items.Add(new ItemPublicoDto
+                {
+                    IdElemento = ren.IdRenglon,
+                    EsRenglon = true,
+                    Nombre = $"Lote {ren.NumeroRenglon}: {ren.Descripcion}",
+                    Cantidad = cantidad,
+                    PrecioBase = Math.Round(precioBase, 2),
+                    MejorOfertaActual = mejorOferta.HasValue ? Math.Round(mejorOferta.Value, 2) : null
+                });
+            }
+        }
+        else
+        {
+            foreach (var det in entity.Detalles.Where(d => d.FecBaja == null))
+            {
+                // Best offer for this item (min for inverse, max for direct)
+                decimal? mejorOferta = null;
+                var ofertasItem = todasLasOfertas.Where(o => o.IdCotizacionDetalle == det.IdCotizacionDetalle).ToList();
+                if (ofertasItem.Count != 0)
+                {
+                    mejorOferta = entity.IdTipoContratacion == 9
+                        ? ofertasItem.Max(o => (decimal?)o.Monto)
+                        : ofertasItem.Min(o => (decimal?)o.Monto);
+                }
+
+                items.Add(new ItemPublicoDto
+                {
+                    IdElemento = det.IdCotizacionDetalle,
+                    EsRenglon = false,
+                    Nombre = itemsMap.TryGetValue(det.IdItem, out var nItem) ? nItem : $"Ítem #{det.IdItem}",
+                    Cantidad = det.Cantidad,
+                    PrecioBase = Math.Round(det.ImporteBase, 2),
+                    MejorOfertaActual = mejorOferta.HasValue ? Math.Round(mejorOferta.Value, 2) : null
+                });
+            }
+        }
+
+        var dto = new SubastaPublicaDetalleDto
+        {
+            IdCotizacion = entity.IdCotizacion,
+            NroCotizacion = entity.NroCotizacion,
+            Tipo = entity.IdTipoContratacion switch
+            {
+                7 => "Subasta Inversa",
+                9 => "Subasta Directa",
+                13 => "Subasta Inversa Monto Fijo",
+                15 => "Subasta Inversa SEEC",
+                _ => "Subasta"
+            },
+            Titulo = entity.Observacion ?? "Subasta " + entity.NroCotizacion,
+            UnidadAdm = entity.IdUnidadAdmNavigation?.NombreUnidadAdm ?? "",
+            FechaFin = entity.Especificacion.FechaFinalizacionSubasta,
+            Items = items
+        };
+
+        return Ok(dto);
     }
 
     private string GetEstadoNombre(int idEstado) => idEstado switch

@@ -1,6 +1,7 @@
 using PortalSubastas.Licitaciones.Application.RequestDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion;
+using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion.Publica;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Reporting;
 
 namespace PortalSubastas.Licitaciones.Application.Services.Interfaces;
@@ -20,10 +21,12 @@ public interface ICotizacionService
     Task<OperationResponse<bool>> DesistirParticipacionAsync(int idCotizacion);
     Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(int idCotizacion);
 
-    // Endpoints específicos para el Dashboard
+    // Endpoints especificos para el Dashboard
     Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasEnCursoAsync(int? idVigencia);
     Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasProximasAsync(int? idVigencia);
     Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasDelMesAsync(int? idVigencia);
+
+    // Reporteria
     Task<OperationResponse<ReporteLicitacionResponseDto>> GetReporteLicitacionAsync(int idCotizacion);
     Task<OperationResponse<ActaPrelacionReportResponseDto>> GetActaPrelacionAsync(int idCotizacion);
     Task<OperationResponse<DetalleSubastaReportResponseDto>> GetDetalleSubastaAsync(int idCotizacion);
@@ -33,4 +36,8 @@ public interface ICotizacionService
     Task<OperationResponse<ObservacionesProveedoresReportResponseDto>> GetObservacionesProveedoresAsync(int idCotizacion);
     Task<OperationResponse<AuditoriaSubastaReportResponseDto>> GetAuditoriaSubastaAsync(int idCotizacion);
     Task<OperationResponse<VerificacionDocumentacionReportResponseDto>> GetVerificacionDocumentacionAsync(int idCotizacion);
+
+    // Endpoints publicos (AllowAnonymous) para la Vidriera Publica
+    Task<OperationResponse<List<SubastaPublicaListDto>>> GetSubastasPublicasActivasAsync();
+    Task<OperationResponse<SubastaPublicaDetalleDto>> GetDetalleSubastaPublicaAsync(int idCotizacion);
 }

@@ -150,4 +150,38 @@ public class AuthController : BaseController
         var result = await _authService.ReenviarCodigoAsync(request.Email);
         return Return(result);
     }
+
+    /// <summary>
+    /// Envía un código de 6 dígitos al email para restablecer la contraseña.
+    /// </summary>
+    [HttpPost("solicitar-reset")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> SolicitarReset([FromBody] SolicitarResetRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return Return(OperationResponse<bool>.BadRequestResponse("El email es obligatorio."));
+
+        var result = await _authService.SolicitarResetPasswordAsync(request);
+        return Return(result);
+    }
+
+    /// <summary>
+    /// Valida el código de recuperación y cambia la contraseña.
+    /// </summary>
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Codigo) || string.IsNullOrWhiteSpace(request.NuevaPassword))
+            return Return(OperationResponse<bool>.BadRequestResponse("Todos los campos son obligatorios."));
+
+        if (request.NuevaPassword.Length < 6)
+            return Return(OperationResponse<bool>.BadRequestResponse("La contraseña debe tener al menos 6 caracteres."));
+
+        var result = await _authService.ResetPasswordAsync(request);
+        return Return(result);
+    }
 }
