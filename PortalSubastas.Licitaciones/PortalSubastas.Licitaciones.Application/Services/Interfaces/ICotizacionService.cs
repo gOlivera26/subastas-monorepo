@@ -1,6 +1,7 @@
 using PortalSubastas.Licitaciones.Application.RequestDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion;
+using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion.Publica;
 
 namespace PortalSubastas.Licitaciones.Application.Services.Interfaces;
 
@@ -23,4 +24,8 @@ public interface ICotizacionService
     Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasEnCursoAsync(int? idVigencia);
     Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasProximasAsync(int? idVigencia);
     Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasDelMesAsync(int? idVigencia);
+
+    // Endpoints públicos (AllowAnonymous) para la Vidriera Pública
+    Task<OperationResponse<List<SubastaPublicaListDto>>> GetSubastasPublicasActivasAsync();
+    Task<OperationResponse<SubastaPublicaDetalleDto>> GetDetalleSubastaPublicaAsync(int idCotizacion);
 }
