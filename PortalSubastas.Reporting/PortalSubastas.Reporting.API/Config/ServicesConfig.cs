@@ -1,13 +1,8 @@
-using FluentValidation;
-using FluentValidation.AspNetCore;
-using PortalSubastas.Licitaciones.Application.AutoMapper;
-using PortalSubastas.Licitaciones.Application.Services.Implementations;
-using PortalSubastas.Licitaciones.Application.Services.Interfaces;
-using PortalSubastas.Licitaciones.Application.Validators.Reserva;
-using PortalSubastas.Licitaciones.Domain.Interceptors;
-using PortalSubastas.Licitaciones.Domain.Models;
+using PortalSubastas.Reporting.Application.Services.Implementations;
+using PortalSubastas.Reporting.Application.Services.Interfaces;
+using Razor.Templating.Core;
 
-namespace PortalSubastas.Licitaciones.API.Config;
+namespace PortalSubastas.Reporting.API.Config;
 
 public static class ServicesConfig
 {
@@ -41,31 +36,11 @@ public static class ServicesConfig
 
         services.AddSwagger();
         services.AddJwt(configuration);
-
-        services.BindAppSettings(configuration);
-        services.AddAutoMapper(typeof(ReservaProfile).Assembly, typeof(CatalogosProfile).Assembly);
-
-        services.AddValidatorsFromAssembly(typeof(ReservaRequestValidator).Assembly);
-        services.AddFluentValidationAutoValidation();
-
-        services.AddScoped<AuditInterceptor>();
-
-        services.AddDbContext<PortalSubastasContext>((sp, options) =>
-        {
-            var auditInterceptor = sp.GetRequiredService<AuditInterceptor>();
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
-                   .AddInterceptors(auditInterceptor);
-        });
-
-        services.AddInternalServices();
-
-        services.AddHttpClient<IProviderLookupService, ProviderLookupService>(client =>
-        {
-            var baseUrl = configuration["Services:Providers:BaseUrl"] ?? "http://providers-api:8080";
-            client.BaseAddress = new Uri(baseUrl);
-        });
+        services.AddRazorTemplating();
+        services.AddInternalServices(configuration);
 
         services.AddControllers();
+        services.AddHealthChecks();
 
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder()
@@ -99,25 +74,14 @@ public static class ServicesConfig
 
             options.Events = new JwtBearerEvents()
             {
-                OnMessageReceived = context =>
-                {
-                    var accessToken = context.Request.Query["access_token"];
-                    var path = context.HttpContext.Request.Path;
-                    if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/signalr"))
-                    {
-                        context.Token = accessToken;
-                    }
-                    return Task.CompletedTask;
-                },
                 OnChallenge = context =>
                 {
                     context.HandleResponse();
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     context.Response.ContentType = "application/json";
-
                     return context.Response.WriteAsync(JsonSerializer.Serialize(
                         OperationResponse<object>.CreateBuilder().WithCode(401)
-                            .WithMessage("No estás autenticado.").Build()));
+                            .WithMessage("No estas autenticado.").Build()));
                 },
                 OnForbidden = context =>
                 {
@@ -125,7 +89,7 @@ public static class ServicesConfig
                     context.Response.ContentType = "application/json";
                     return context.Response.WriteAsync(JsonSerializer.Serialize(
                         OperationResponse<object>.CreateBuilder().WithCode(403)
-                            .WithMessage("No tienes permisos para realizar esta acción.").Build()));
+                            .WithMessage("No tienes permisos para realizar esta accion.").Build()));
                 }
             };
         });
@@ -137,13 +101,13 @@ public static class ServicesConfig
         {
             c.SwaggerDoc("v1", new OpenApiInfo
             {
-                Title = "PortalSubastas.Licitaciones API",
+                Title = "PortalSubastas.Reporting API",
                 Version = "v1"
             });
 
             c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
-                Description = "Ingrese el token de autenticación en el siguiente formato: Bearer {token}",
+                Description = "Ingrese el token de autenticacion en el siguiente formato: Bearer {token}",
                 Name = "Authorization",
                 In = ParameterLocation.Header,
                 Type = SecuritySchemeType.ApiKey,
@@ -168,26 +132,16 @@ public static class ServicesConfig
         });
     }
 
-    private static void AddInternalServices(this IServiceCollection services)
+    private static void AddInternalServices(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddScoped<IReservaService, ReservaService>();
-        services.AddScoped<IReservaDetalleService, ReservaDetalleService>();
-        services.AddScoped<ICatalogoBienService, CatalogoBienService>();
-        services.AddScoped<IMonedaService, MonedaService>();
-        services.AddScoped<ICategoriaProgramaticaService, CategoriaProgramaticaService>();
-        services.AddScoped<IObjetoGastoService, ObjetoGastoService>();
-        services.AddScoped<ICotizacionService, CotizacionService>();
-        services.AddScoped<IGanadorService, GanadorService>();
-        services.AddScoped<IFileStorageService, CloudflareR2StorageService>();
-        services.AddScoped<IGarantiaService, GarantiaService>();
-        services.AddScoped<IOfertaSubastaService, OfertaSubastaService>();
-        services.AddScoped<ISubastaNotificationService, PortalSubastas.Licitaciones.API.Services.SubastaNotificationService>();
-        services.AddScoped<IConsultaService, ConsultaService>();
-        services.AddScoped<IFileStorageService, CloudflareR2StorageService>();
-        services.AddScoped<ICotizacionDocumentoService, CotizacionDocumentoService>();
-    }
+        services.AddHttpClient<IReportDataService, ReportDataService>(client =>
+        {
+            var baseUrl = configuration["Services:Licitaciones:BaseUrl"] ?? "http://licitaciones-api:8080";
+            client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+        });
 
-    private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)
-    {
+        services.AddScoped<IReportTemplateService, ReportTemplateService>();
+        services.AddScoped<IReportRendererService, ReportRendererService>();
+        services.AddScoped<IReportService, ReportService>();
     }
 }

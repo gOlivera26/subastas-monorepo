@@ -1,0 +1,93 @@
+@model PortalSubastas.Reporting.Domain.Models.AuditoriaSubastaReport
+@{
+    var culture = new System.Globalization.CultureInfo("es-AR");
+    var fechaEmision = Model.Cabecera.FechaEmision.ToOffset(TimeSpan.FromHours(-3)).ToString("dd/MM/yyyy HH:mm", culture);
+    string ValueOrDash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+    string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd/MM/yyyy HH:mm", culture) : "-";
+}
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Auditoria @Model.Cabecera.NumeroCotizacion</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { color: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 11px; margin: 0; }
+        .page { padding: 24px 28px; }
+        header { border-bottom: 2px solid #111827; margin-bottom: 16px; padding-bottom: 10px; }
+        .brand { color: #6b7280; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+        h1 { font-size: 20px; margin: 6px 0 4px; }
+        h2 { font-size: 14px; margin: 18px 0 8px; }
+        .subtitle { color: #4b5563; }
+        .grid { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); margin: 14px 0; }
+        .card { border: 1px solid #d1d5db; border-radius: 5px; padding: 8px; }
+        .metric { background: #f9fafb; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; text-align: center; }
+        .metric .value { display: block; font-size: 22px; font-weight: 700; }
+        .label { color: #6b7280; display: block; font-size: 9px; margin-bottom: 3px; text-transform: uppercase; }
+        .value { font-weight: 700; }
+        table { border-collapse: collapse; margin-top: 10px; page-break-inside: auto; width: 100%; }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        th, td { border: 1px solid #d1d5db; padding: 6px; text-align: left; vertical-align: top; }
+        th { background: #f3f4f6; font-size: 9px; text-transform: uppercase; }
+        .number { text-align: right; white-space: nowrap; }
+        .note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; color: #1e3a8a; margin-top: 12px; padding: 8px; }
+    </style>
+</head>
+<body>
+<main class="page">
+    <header>
+        <div class="brand">Portal Subastas · Reporteria</div>
+        <h1>Auditoria de subasta</h1>
+        <div class="subtitle">@Model.Cabecera.Titulo</div>
+    </header>
+
+    <section class="grid">
+        <div class="card"><span class="label">Cotizacion</span><span class="value">@Model.Cabecera.NumeroCotizacion</span></div>
+        <div class="card"><span class="label">Estado</span><span class="value">@Model.Cabecera.Estado</span></div>
+        <div class="card"><span class="label">Tipo</span><span class="value">@Model.Cabecera.TipoContratacion</span></div>
+        <div class="card"><span class="label">Criterio adjudicacion</span><span class="value">@Model.Cabecera.CriterioAdjudicacion</span></div>
+        <div class="card"><span class="label">Unidad administrativa</span><span class="value">@Model.Cabecera.UnidadAdministrativa</span></div>
+        <div class="card"><span class="label">Expediente</span><span class="value">@ValueOrDash(Model.Cabecera.NumeroExpediente)</span></div>
+        <div class="card"><span class="label">Fecha cotizacion</span><span class="value">@FormatDate(Model.Cabecera.FechaCotizacion)</span></div>
+        <div class="card"><span class="label">Inicio subasta</span><span class="value">@FormatDate(Model.Cabecera.FechaInicioSubasta)</span></div>
+        <div class="card"><span class="label">Emitido</span><span class="value">@fechaEmision</span></div>
+    </section>
+
+    <section class="grid">
+        <div class="metric"><span class="label">Documentos</span><span class="value">@Model.Resumen.CantidadDocumentos</span></div>
+        <div class="metric"><span class="label">Ofertas</span><span class="value">@Model.Resumen.CantidadOfertas</span></div>
+        <div class="metric"><span class="label">Proveedores</span><span class="value">@Model.Resumen.CantidadProveedores</span></div>
+    </section>
+
+    <div class="note">
+        Reporte ID 10 readecuado al modelo nuevo. Legacy lo armaba con SUBASTA_REPORTE_AUDITORIA contando documentos, ofertas y proveedores por cotizacion.
+        Aca se calcula sobre las tablas actuales sin modificar esquema.
+    </div>
+
+    <h2>Detalle de movimientos disponibles</h2>
+    <table>
+        <thead>
+        <tr>
+            <th>Tipo</th>
+            <th>Descripcion</th>
+            <th class="number">Cantidad</th>
+            <th>Usuario</th>
+            <th>Fecha</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var movimiento in Model.Movimientos)
+        {
+            <tr>
+                <td>@movimiento.Tipo</td>
+                <td>@movimiento.Descripcion</td>
+                <td class="number">@movimiento.Cantidad</td>
+                <td>@ValueOrDash(movimiento.Usuario)</td>
+                <td>@FormatDate(movimiento.Fecha)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</main>
+</body>
+</html>
