@@ -1,3 +1,5 @@
+using System.Data.Common;
+using Microsoft.Extensions.Logging;
 using PortalSubastas.Licitaciones.Application.RequestDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion;
@@ -11,12 +13,14 @@ public class CotizacionService : BaseService, ICotizacionService
 {
     private readonly PortalSubastasContext _context;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<CotizacionService> _logger;
 
-    public CotizacionService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache, IPublishEndpoint publishEndpoint)
+    public CotizacionService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache, IPublishEndpoint publishEndpoint, ILogger<CotizacionService> logger)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _publishEndpoint = publishEndpoint;
+        _logger = logger;
     }
 
     public async Task<OperationResponse<List<CotizacionResponseDto>>> GetAllAsync(int? idVigencia)
@@ -228,7 +232,89 @@ public class CotizacionService : BaseService, ICotizacionService
 
         await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PUBLICADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
 
+        // Publicar SubastaPublicadaEvent con lista de proveedores activos
+        try
+        {
+            await PublishSubastaPublicadaEventAsync(entity);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ No se pudo publicar SubastaPublicadaEvent para Cotización {IdCotizacion}. El flujo continúa.", id);
+        }
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
+    }
+
+    private async Task PublishSubastaPublicadaEventAsync(TCotizacion entity)
+    {
+        var proveedoresActivos = await _context.TCotizacionProveedores
+            .Where(p => p.IdCotizacion == entity.IdCotizacion && p.FecBaja == null)
+            .ToListAsync();
+
+        if (proveedoresActivos.Count == 0)
+        {
+            _logger.LogInformation("⚠️ No hay proveedores activos para Cotización {IdCotizacion}. No se publica SubastaPublicadaEvent.", entity.IdCotizacion);
+            return;
+        }
+
+        var proveedorIds = proveedoresActivos.Select(p => p.IdProveedor).Distinct().ToList();
+
+        // Resolver emails y nombres desde negocio.t_proveedores
+        var proveedoresInfo = new List<ProveedorInfo>();
+        var dbConnection = _context.Database.GetDbConnection();
+        await dbConnection.OpenAsync();
+
+        try
+        {
+            await using var cmd = dbConnection.CreateCommand();
+            cmd.CommandText = "SELECT id, email_institucional, razon_social FROM negocio.t_proveedores WHERE id = ANY(@ids) AND fec_baja IS NULL";
+            var param = cmd.CreateParameter();
+            param.ParameterName = "ids";
+            param.Value = proveedorIds;
+            cmd.Parameters.Add(param);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var idProv = reader.GetInt32(0);
+                var email = reader.IsDBNull(1) ? null : reader.GetString(1);
+                var nombre = reader.IsDBNull(2) ? null : reader.GetString(2);
+                proveedoresInfo.Add(new ProveedorInfo(idProv, email ?? "", nombre ?? ""));
+            }
+        }
+        finally
+        {
+            // No cerramos la conexión aquí — la maneja EF Core
+        }
+
+        if (proveedoresInfo.Count == 0)
+        {
+            _logger.LogInformation("⚠️ No se encontraron datos de proveedores activos para Cotización {IdCotizacion}.", entity.IdCotizacion);
+            return;
+        }
+
+        string tipoNombre = entity.IdTipoContratacion switch
+        {
+            7 => "Subasta Inversa",
+            9 => "Subasta Directa",
+            13 => "Subasta Inversa Monto Fijo",
+            15 => "Subasta Inversa SEEC",
+            _ => "Subasta"
+        };
+
+        var subastaEvent = new SubastaPublicadaEvent(
+            IdCotizacion: entity.IdCotizacion,
+            NroCotizacion: entity.NroCotizacion,
+            Titulo: entity.Observacion ?? "Subasta " + entity.NroCotizacion,
+            FechaInicio: entity.Especificacion?.FechaInicioSubasta,
+            FechaFin: entity.Especificacion?.FechaFinalizacionSubasta,
+            TipoContratacion: tipoNombre,
+            Proveedores: proveedoresInfo,
+            OccuredOn: DateTime.UtcNow
+        );
+
+        await _publishEndpoint.Publish(subastaEvent);
+        _logger.LogInformation("📧 SubastaPublicadaEvent publicado: Cotización {IdCotizacion}, {Count} proveedores", entity.IdCotizacion, proveedoresInfo.Count);
     }
 
     public async Task<OperationResponse<CotizacionResponseDto>> FinalizarAsync(int id)
