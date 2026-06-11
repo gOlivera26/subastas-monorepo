@@ -54,9 +54,9 @@ public class UserService : BaseService, IUserService
 
         await _emailService.SendEmailAsync(
             usuario.EmailLogin,
-            "Tu cuenta fue aprobada — Trasus Argentina",
+            "Tu cuenta fue aprobada — Innovanow",
             $@"
-                <h2>¡Bienvenido a Trasus Argentina!</h2>
+                <h2>¡Bienvenido a Owen Subastas!</h2>
                 <p>Tu cuenta fue aprobada. Ya podés ingresar al sistema con tu email y contraseña.</p>
                 <p>
                     <a href='{_configuration["Frontend:Url"]}/auth/login'
@@ -65,7 +65,7 @@ public class UserService : BaseService, IUserService
                     </a>
                 </p>
                 <hr>
-                <small>Trasus Argentina — Portal de Subastas</small>
+                <small>Innovanow — Portal de Subastas</small>
             ");
 
         await PublishSystemLogAsync(_publishEndpoint, "USUARIO_APROBADO", "IAM",

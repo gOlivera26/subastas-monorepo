@@ -10,5 +10,7 @@
         Task<OperationResponse<LoginResponseDto>> SwitchContextAsync(SwitchContextRequestDto request);
         Task<OperationResponse<bool>> ConfirmarEmailAsync(ConfirmEmailRequestDto request);
         Task<OperationResponse<bool>> ReenviarCodigoAsync(string email);
+        Task<OperationResponse<bool>> SolicitarResetPasswordAsync(SolicitarResetRequestDto request);
+        Task<OperationResponse<bool>> ResetPasswordAsync(ResetPasswordRequestDto request);
     }
 }
