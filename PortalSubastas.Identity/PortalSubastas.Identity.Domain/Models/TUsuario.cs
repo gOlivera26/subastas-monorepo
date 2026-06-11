@@ -33,6 +33,12 @@ public partial class TUsuario : IFullAuditableEntity
 
     public DateTime? FecBaja { get; set; }
 
+    public string? CodigoConfirmacion { get; set; }
+
+    public bool EmailConfirmado { get; set; }
+
+    public DateTime? FechaEnvioCodigo { get; set; }
+
     public DateTime? FechaAprobacion { get; set; }
 
     public Guid? AprobadoPor { get; set; }

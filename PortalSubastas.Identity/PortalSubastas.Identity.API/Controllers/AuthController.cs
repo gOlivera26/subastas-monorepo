@@ -124,4 +124,30 @@ public class AuthController : BaseController
         var result = await _authService.SwitchContextAsync(request);
         return Return(result);
     }
+
+    /// <summary>
+    /// Confirma el correo electrónico con el código de 6 dígitos recibido por email.
+    /// </summary>
+    [HttpPost("confirmar-email")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ConfirmarEmail([FromBody] ConfirmEmailRequestDto request)
+    {
+        var result = await _authService.ConfirmarEmailAsync(request);
+        return Return(result);
+    }
+
+    /// <summary>
+    /// Reenvía el código de confirmación al email del usuario.
+    /// </summary>
+    [HttpPost("reenviar-codigo")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReenviarCodigo([FromBody] ReenviarCodigoRequestDto request)
+    {
+        var result = await _authService.ReenviarCodigoAsync(request.Email);
+        return Return(result);
+    }
 }

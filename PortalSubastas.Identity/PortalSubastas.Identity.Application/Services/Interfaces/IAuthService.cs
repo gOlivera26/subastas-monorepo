@@ -8,5 +8,7 @@
         Task<OperationResponse<ProfileResponseDto>> GetProfileAsync();
         Task<OperationResponse<bool>> ChangePasswordAsync(ChangePasswordRequestDto request);
         Task<OperationResponse<LoginResponseDto>> SwitchContextAsync(SwitchContextRequestDto request);
+        Task<OperationResponse<bool>> ConfirmarEmailAsync(ConfirmEmailRequestDto request);
+        Task<OperationResponse<bool>> ReenviarCodigoAsync(string email);
     }
 }
