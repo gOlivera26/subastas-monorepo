@@ -445,6 +445,72 @@ public class AuthService : BaseService, IAuthService
         return Ok(true);
     }
 
+    public async Task<OperationResponse<bool>> SolicitarResetPasswordAsync(SolicitarResetRequestDto request)
+    {
+        // Siempre OK aunque no exista el email — no revelar qué emails están registrados
+        var usuario = await _identityContext.TUsuarios
+            .Include(u => u.IdEstadoNavigation)
+            .FirstOrDefaultAsync(u => u.EmailLogin == request.Email);
+
+        if (usuario == null || usuario.IdEstadoNavigation.Descripcion != "ACTIVO")
+            return Ok(true);
+
+        var codigo = GenerarCodigoConfirmacion();
+        usuario.CodigoConfirmacion = codigo;
+        usuario.FechaEnvioCodigo = DateTime.UtcNow;
+
+        PrepareAuditableEntity(usuario, isNew: false);
+        await _identityContext.SaveChangesAsync();
+
+        await _emailService.SendEmailAsync(
+            request.Email,
+            "Código de recuperación — Trasus Argentina",
+            $@"
+                <h2>Recuperación de contraseña</h2>
+                <p>Recibimos una solicitud para restablecer tu contraseña.</p>
+                <p>Tu código de verificación es:</p>
+                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{codigo}</h1>
+                <p>Este código expira en 30 minutos.</p>
+                <p>Si no solicitaste este cambio, ignorá este mensaje.</p>
+                <hr>
+                <small>Trasus Argentina — Portal de Subastas</small>
+            ");
+
+        return Ok(true);
+    }
+
+    public async Task<OperationResponse<bool>> ResetPasswordAsync(ResetPasswordRequestDto request)
+    {
+        var usuario = await _identityContext.TUsuarios
+            .Include(u => u.IdEstadoNavigation)
+            .FirstOrDefaultAsync(u => u.EmailLogin == request.Email);
+
+        if (usuario == null)
+            return BadRequest<bool>("Solicitud de recuperación inválida.");
+
+        if (usuario.IdEstadoNavigation.Descripcion != "ACTIVO")
+            return BadRequest<bool>("La cuenta no está activa.");
+
+        if (usuario.CodigoConfirmacion != request.Codigo)
+            return BadRequest<bool>("El código de recuperación es incorrecto.");
+
+        if (usuario.FechaEnvioCodigo.HasValue &&
+            DateTime.UtcNow > usuario.FechaEnvioCodigo.Value.AddMinutes(30))
+            return BadRequest<bool>("El código expiró. Solicitá uno nuevo.");
+
+        usuario.PasswordHash = BC.HashPassword(request.NuevaPassword);
+        usuario.CodigoConfirmacion = null;
+        usuario.FechaEnvioCodigo = null;
+
+        PrepareAuditableEntity(usuario, isNew: false);
+        await _identityContext.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "RESET_PASSWORD", "IAM",
+            new { Mensaje = $"El usuario {usuario.EmailLogin} restableció su contraseña." });
+
+        return Ok(true);
+    }
+
     private static string GenerarCodigoConfirmacion()
         => Random.Shared.Next(100_000, 999_999).ToString();
 
