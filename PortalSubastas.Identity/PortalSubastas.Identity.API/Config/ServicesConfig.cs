@@ -1,4 +1,6 @@
-﻿namespace PortalSubastas.Identity.API.Config;
+﻿using Resend;
+
+namespace PortalSubastas.Identity.API.Config;
 
 public static class ServicesConfig
 {
@@ -34,18 +36,24 @@ public static class ServicesConfig
         services.AddJwt(configuration);
 
         services.BindAppSettings(configuration);
-        services.AddAutoMapper(typeof(PortalSubastas.Identity.Application.AutoMapper.UserProfile).Assembly);
+        services.AddAutoMapper(cfg =>
+        {
+            cfg.AddMaps(typeof(PortalSubastas.Identity.Application.AutoMapper.UserProfile).Assembly);
+        });
 
         services.AddScoped<PortalSubastas.Identity.Domain.Interceptors.AuditInterceptor>();
 
         services.AddDbContext<PortalSubastasContext>((sp, options) =>
         {
             var interceptor = sp.GetRequiredService<PortalSubastas.Identity.Domain.Interceptors.AuditInterceptor>();
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"), o => o.UseVector())
                    .AddInterceptors(interceptor); //intercepto solicitudes para auditar
         });
 
         services.AddInternalServices();
+
+        services.AddResend(options =>
+            options.ApiToken = configuration["Resend:ApiKey"]!);
 
         services.AddControllers();
 
@@ -142,6 +150,7 @@ public static class ServicesConfig
 
     private static void AddInternalServices(this IServiceCollection services)
     {
+        services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IOrganizationService, OrganizationService>();
         services.AddScoped<IUserService, UserService>();

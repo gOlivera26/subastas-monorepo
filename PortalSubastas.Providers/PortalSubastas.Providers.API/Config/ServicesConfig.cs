@@ -1,6 +1,7 @@
 using PortalSubastas.Providers.Application.AutoMapper;
 using PortalSubastas.Providers.Application.Services.Implementations;
 using PortalSubastas.Providers.Application.Services.Interfaces;
+using PortalSubastas.Providers.Domain.Interceptors;
 using PortalSubastas.Providers.Domain.Models;
 
 namespace PortalSubastas.Providers.API.Config;
@@ -40,8 +41,14 @@ public static class ServicesConfig
 
         services.AddAutoMapper(typeof(ProviderProfile).Assembly);
 
-        services.AddDbContext<ProvidersContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+        services.AddScoped<AuditInterceptor>();
+
+        services.AddDbContext<ProvidersContext>((sp, options) =>
+        {
+            var interceptor = sp.GetRequiredService<AuditInterceptor>();
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"), o => o.UseVector())
+                   .AddInterceptors(interceptor);
+        });
 
         services.AddRabbitMq(configuration);
 

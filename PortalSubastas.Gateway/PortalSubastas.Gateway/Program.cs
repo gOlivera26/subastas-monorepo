@@ -1,4 +1,8 @@
+using PortalSubastas.Gateway.Config;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddOpenTelemetryTracing(builder.Configuration);
 
 builder.Services.AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
@@ -15,6 +19,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseOpenTelemetry();
 
 app.UseCors("AllowFrontendApp");
 

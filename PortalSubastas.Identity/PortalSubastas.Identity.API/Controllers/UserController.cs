@@ -99,9 +99,9 @@ public class UserController : BaseController
     [HttpPost("{id}/unlink")]
     [Authorize]
     [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> UnlinkEntity(Guid id)
+    public async Task<IActionResult> UnlinkEntity(Guid id, [FromBody] LinkEntityRequestDto request)
     {
-        var result = await _userService.UnlinkUserEntityAsync(id);
+        var result = await _userService.UnlinkUserEntityAsync(id, request);
         return Return(result);
     }
 

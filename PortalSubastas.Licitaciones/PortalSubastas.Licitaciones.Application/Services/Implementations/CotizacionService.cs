@@ -11,17 +11,20 @@ public class CotizacionService : BaseService, ICotizacionService
 {
     private readonly PortalSubastasContext _context;
     private readonly IProviderLookupService _providerLookupService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public CotizacionService(
         PortalSubastasContext context,
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
-        IProviderLookupService providerLookupService)
+        IProviderLookupService providerLookupService,
+        IPublishEndpoint publishEndpoint)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _providerLookupService = providerLookupService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<List<CotizacionResponseDto>>> GetAllAsync(int? idVigencia)
@@ -822,6 +825,8 @@ public class CotizacionService : BaseService, ICotizacionService
         _context.TCotizaciones.Add(entity);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_CREADA", "LICITACIONES", new { entity.NroCotizacion, entity.IdCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -841,6 +846,9 @@ public class CotizacionService : BaseService, ICotizacionService
             PrepareAuditableEntity(entity.Especificacion, isNew: false);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_MODIFICADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -856,6 +864,9 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity, isNew: false, isDeleted: true);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_ANULADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(true);
     }
 
@@ -874,6 +885,9 @@ public class CotizacionService : BaseService, ICotizacionService
         entity.IdEstado = 39; // EnviadaPendiente (publicada)
         PrepareAuditableEntity(entity, isNew: false);
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PUBLICADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -893,6 +907,9 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity, isNew: false);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_FINALIZADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -911,6 +928,9 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity, isNew: false);
 
         await _context.SaveChangesAsync();
+
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_DESISTIDA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -1034,6 +1054,8 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity.Especificacion, isNew: false);
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PRORROGADA", "LICITACIONES", new { entity.IdCotizacion, Minutos = minutos, NuevaFechaFin = entity.Especificacion?.FechaFinalizacionSubasta });
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -1054,8 +1076,11 @@ public class CotizacionService : BaseService, ICotizacionService
 
         await _context.SaveChangesAsync();
 
+        await PublishSystemLogAsync(_publishEndpoint, "PROVEEDOR_DESISTE_SUBASTA", "LICITACIONES", new { IdCotizacion = idCotizacion, IdProveedor = idProveedor });
+
         return Ok(true);
     }
+
 
 
     public async Task<OperationResponse<VerificacionDocumentacionReportResponseDto>> GetVerificacionDocumentacionAsync(int idCotizacion)
@@ -1337,6 +1362,65 @@ public class CotizacionService : BaseService, ICotizacionService
             partes.Add(observacion);
 
         return partes.Count == 0 ? null : string.Join(" | ", partes);
+    }
+
+public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(int idCotizacion)
+    {
+        var cotizacion = await _context.TCotizaciones
+            .Include(c => c.Especificacion)
+            .Include(c => c.Detalles)
+            .FirstOrDefaultAsync(c => c.IdCotizacion == idCotizacion);
+
+        if (cotizacion == null) return NotFound<MetricasAhorroDto>();
+
+        bool isRenglon = cotizacion.Especificacion?.CriterioAdjudicacion == 1;
+        decimal presupuestoBaseTotal = 0;
+        decimal mejorOfertaTotal = 0;
+
+        if (isRenglon)
+        {
+            var renglonesIds = cotizacion.Detalles.Where(d => d.IdRenglon.HasValue).Select(d => d.IdRenglon.Value).Distinct().ToList();
+
+            foreach (var idRenglon in renglonesIds)
+            {
+                decimal baseRenglon = cotizacion.Detalles.Where(d => d.IdRenglon == idRenglon).Sum(d => d.ImporteBase * d.Cantidad);
+                presupuestoBaseTotal += baseRenglon;
+                
+                var minOferta = await _context.TOfertasSubastas
+                    .Where(o => o.IdRenglon == idRenglon && o.FecBaja == null)
+                    .MinAsync(o => (decimal?)o.Monto);
+
+                mejorOfertaTotal += minOferta ?? baseRenglon;
+            }
+        }
+        else
+        {
+            foreach (var detalle in cotizacion.Detalles)
+            {
+                decimal baseItem = detalle.ImporteBase * detalle.Cantidad;
+                presupuestoBaseTotal += baseItem;
+
+                var minOferta = await _context.TOfertasSubastas
+                    .Where(o => o.IdCotizacionDetalle == detalle.IdCotizacionDetalle && o.FecBaja == null)
+                    .MinAsync(o => (decimal?)o.Monto);
+
+                mejorOfertaTotal += (minOferta ?? detalle.ImporteBase) * detalle.Cantidad;
+            }
+        }
+
+        decimal ahorroPorcentaje = 0;
+        if (presupuestoBaseTotal > 0)
+        {
+            ahorroPorcentaje = ((presupuestoBaseTotal - mejorOfertaTotal) / presupuestoBaseTotal) * 100m;
+        }
+
+        return Ok(new MetricasAhorroDto
+        {
+            PresupuestoBase = Math.Round(presupuestoBaseTotal, 2),
+            MejorOfertaFinal = Math.Round(mejorOfertaTotal, 2),
+            AhorroPorcentaje = Math.Round(ahorroPorcentaje, 2)
+        });
+
     }
 
     private string GetEstadoNombre(int idEstado) => idEstado switch

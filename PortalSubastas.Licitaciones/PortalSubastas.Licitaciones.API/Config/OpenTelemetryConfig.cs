@@ -19,7 +19,12 @@ public static class OpenTelemetryConfig
             .WithTracing(tracing => tracing
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
+                .AddEntityFrameworkCoreInstrumentation(options =>
+                {
+                    options.SetDbStatementForText = true;
+                })
                 .AddSource(serviceName)
+                .AddSource("MassTransit")
                 .AddOtlpExporter(options =>
                 {
                     options.Endpoint = new Uri(otlpEndpoint);
@@ -28,7 +33,12 @@ public static class OpenTelemetryConfig
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
                 .AddRuntimeInstrumentation()
-                .AddPrometheusExporter());
+                .AddMeter("Microsoft.AspNetCore.Hosting", "Microsoft.AspNetCore.Server.Kestrel")
+                .AddOtlpExporter(options =>
+                {
+                    options.Endpoint = new Uri(otlpEndpoint);
+                    options.Protocol = OtlpExportProtocol.Grpc;
+                }));
 
         services.AddLogging(logging => logging
             .AddOpenTelemetry(options =>
@@ -56,8 +66,6 @@ public static class OpenTelemetryConfig
 
     public static WebApplication UseOpenTelemetry(this WebApplication app)
     {
-        app.UseOpenTelemetryPrometheusScrapingEndpoint();
-
         return app;
     }
 }

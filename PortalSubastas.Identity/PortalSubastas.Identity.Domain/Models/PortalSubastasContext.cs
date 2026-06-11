@@ -67,6 +67,8 @@ public partial class PortalSubastasContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasPostgresExtension("vector");
+
         modelBuilder.Entity<TEstadosUsuario>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("t_estados_usuario_pkey");
@@ -693,6 +695,15 @@ public partial class PortalSubastasContext : DbContext
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("id");
             entity.Property(e => e.AprobadoPor).HasColumnName("aprobado_por");
+            entity.Property(e => e.CodigoConfirmacion)
+                .HasMaxLength(6)
+                .HasColumnName("codigo_confirmacion");
+            entity.Property(e => e.EmailConfirmado)
+                .HasDefaultValue(false)
+                .HasColumnName("email_confirmado");
+            entity.Property(e => e.FechaEnvioCodigo)
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("fecha_envio_codigo");
             entity.Property(e => e.EmailLogin)
                 .IsRequired()
                 .HasMaxLength(255)

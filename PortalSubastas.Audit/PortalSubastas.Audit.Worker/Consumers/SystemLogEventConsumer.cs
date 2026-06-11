@@ -41,7 +41,8 @@ public class SystemLogEventConsumer : IConsumer<SystemLogEvent>
 
         cmd.Parameters.AddWithValue("detalles", string.IsNullOrWhiteSpace(msg.Details) ? "{}" : msg.Details);
         cmd.Parameters.AddWithValue("ipOrigen", msg.IpAddress ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("fechaHora", msg.OccurredAt);
+        var fechaHora = DateTime.SpecifyKind(msg.OccurredAt, DateTimeKind.Local);
+        cmd.Parameters.AddWithValue("fechaHora", fechaHora);
 
         await cmd.ExecuteNonQueryAsync();
 

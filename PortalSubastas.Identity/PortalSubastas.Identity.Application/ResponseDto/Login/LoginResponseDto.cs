@@ -9,4 +9,13 @@ public class LoginResponseDto
     public string Rol { get; set; } = string.Empty;
     public List<ModuloDto> Modulos { get; set; } = new();
     public List<PaginaDto> Paginas { get; set; } = new();
+    public List<EntidadDto> Entidades { get; set; } = new();
+}
+
+// NUEVA CLASE
+public class EntidadDto
+{
+    public int Id { get; set; }
+    public string Tipo { get; set; } = string.Empty; // "GESTOR" o "PROVEEDOR"
+    public string Nombre { get; set; } = string.Empty;
 }

@@ -3,18 +3,24 @@
 public class UserService : BaseService, IUserService
 {
     private readonly PortalSubastasContext _context;
+    private readonly IConfiguration _configuration;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IEmailService _emailService;
 
     public UserService(
         PortalSubastasContext context,
+        IConfiguration configuration,
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
-        IPublishEndpoint publishEndpoint)
+        IPublishEndpoint publishEndpoint,
+        IEmailService emailService)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
+        _configuration = configuration;
         _publishEndpoint = publishEndpoint;
+        _emailService = emailService;
     }
 
     public async Task<OperationResponse<List<PendingUserDto>>> GetPendingUsersAsync()
@@ -32,16 +38,35 @@ public class UserService : BaseService, IUserService
 
     public async Task<OperationResponse<bool>> ApproveUserAsync(Guid userId)
     {
-        var usuario = await _context.TUsuarios.FindAsync(userId);
+        var usuario = await _context.TUsuarios
+            .Include(u => u.IdPersonaNavigation)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
         if (usuario == null) return NotFound<bool>();
         if (usuario.IdEstado != 4) return BadRequest<bool>("El usuario no está en estado pendiente.");
 
-        usuario.IdEstado = 1; // ACTIVO
+        usuario.IdEstado = 2; // ACTIVO
         usuario.FechaAprobacion = DateTime.UtcNow;
         usuario.AprobadoPor = GetCurrentUserIdGuid();
 
         PrepareAuditableEntity(usuario, isNew: false);
         await _context.SaveChangesAsync();
+
+        await _emailService.SendEmailAsync(
+            usuario.EmailLogin,
+            "Tu cuenta fue aprobada — Trasus Argentina",
+            $@"
+                <h2>¡Bienvenido a Trasus Argentina!</h2>
+                <p>Tu cuenta fue aprobada. Ya podés ingresar al sistema con tu email y contraseña.</p>
+                <p>
+                    <a href='{_configuration["Frontend:Url"]}/auth/login'
+                       style='display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;'>
+                        Ir al inicio de sesión
+                    </a>
+                </p>
+                <hr>
+                <small>Trasus Argentina — Portal de Subastas</small>
+            ");
 
         await PublishSystemLogAsync(_publishEndpoint, "USUARIO_APROBADO", "IAM",
             new { Mensaje = $"Cuenta aprobada el {usuario.FechaAprobacion?.ToLocalTime():dd/MM/yyyy HH:mm}" });
@@ -57,7 +82,7 @@ public class UserService : BaseService, IUserService
             .Include(u => u.IdEstadoNavigation)
             .Include(u => u.TJurisdiccionesUsuarios).ThenInclude(j => j.IdOrganizacionNavigation)
             .Include(u => u.IdPersonaNavigation.TProveedoresRepresentantes).ThenInclude(pr => pr.IdProveedorNavigation)
-            .Where(u => u.IdEstado != 4);
+            .Where(u => u.IdEstado != 4 && u.IdEstado != 8);
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -114,7 +139,7 @@ public class UserService : BaseService, IUserService
         return Ok(tempPassword);
     }
 
-    public async Task<OperationResponse<bool>> UnlinkUserEntityAsync(Guid userId)
+    public async Task<OperationResponse<bool>> UnlinkUserEntityAsync(Guid userId, LinkEntityRequestDto request)
     {
         var usuario = await _context.TUsuarios
             .Include(u => u.TJurisdiccionesUsuarios)
@@ -124,23 +149,32 @@ public class UserService : BaseService, IUserService
         if (usuario == null) return NotFound<bool>();
 
         bool fueDesvinculado = false;
-        if (usuario.TJurisdiccionesUsuarios.Any())
+
+        if (request.TipoEntidad == "GESTOR")
         {
-            foreach (var j in usuario.TJurisdiccionesUsuarios) PrepareAuditableEntity(j, false, true);
-            _context.TJurisdiccionesUsuarios.UpdateRange(usuario.TJurisdiccionesUsuarios);
-            fueDesvinculado = true;
+            var jur = usuario.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdOrganizacion == request.IdEntidad && j.FecBaja == null);
+            if (jur != null)
+            {
+                PrepareAuditableEntity(jur, false, true);
+                _context.TJurisdiccionesUsuarios.Update(jur);
+                fueDesvinculado = true;
+            }
         }
-        if (usuario.IdPersonaNavigation?.TProveedoresRepresentantes.Any() == true)
+        else if (request.TipoEntidad == "PROVEEDOR")
         {
-            foreach (var r in usuario.IdPersonaNavigation.TProveedoresRepresentantes) PrepareAuditableEntity(r, false, true);
-            _context.TProveedoresRepresentantes.UpdateRange(usuario.IdPersonaNavigation.TProveedoresRepresentantes);
-            fueDesvinculado = true;
+            var prov = usuario.IdPersonaNavigation?.TProveedoresRepresentantes.FirstOrDefault(p => p.IdProveedor == request.IdEntidad && p.FecBaja == null);
+            if (prov != null)
+            {
+                PrepareAuditableEntity(prov, false, true);
+                _context.TProveedoresRepresentantes.Update(prov);
+                fueDesvinculado = true;
+            }
         }
 
-        if (!fueDesvinculado) return BadRequest<bool>("El usuario no tiene vínculos.");
+        if (!fueDesvinculado) return BadRequest<bool>("No se encontró el vínculo especificado para desvincular.");
 
         await _context.SaveChangesAsync();
-        await PublishSystemLogAsync(_publishEndpoint, "USUARIO_DESVINCULADO", "IAM", new { Mensaje = $"Desvinculación de {usuario.EmailLogin}" });
+        await PublishSystemLogAsync(_publishEndpoint, "USUARIO_DESVINCULADO", "IAM", new { Mensaje = $"Desvinculación de {usuario.EmailLogin} de {request.TipoEntidad} {request.IdEntidad}" });
 
         return Ok(true);
     }
@@ -171,17 +205,20 @@ public class UserService : BaseService, IUserService
 
         if (usuario == null) return NotFound<bool>();
 
-        if (usuario.TJurisdiccionesUsuarios.Any() || usuario.IdPersonaNavigation?.TProveedoresRepresentantes.Any() == true)
-            return BadRequest<bool>("El usuario ya tiene una entidad vinculada.");
-
         if (request.TipoEntidad == "GESTOR")
         {
-            var jurisdiccion = new TJurisdiccionesUsuario { IdUsuario = usuario.Id, IdOrganizacion = request.IdEntidad, EsPrincipal = true };
+            if (usuario.TJurisdiccionesUsuarios.Any(j => j.IdOrganizacion == request.IdEntidad && j.FecBaja == null))
+                return BadRequest<bool>("El usuario ya se encuentra vinculado a esta organización.");
+
+            var jurisdiccion = new TJurisdiccionesUsuario { IdUsuario = usuario.Id, IdOrganizacion = request.IdEntidad, EsPrincipal = !usuario.TJurisdiccionesUsuarios.Any() };
             PrepareAuditableEntity(jurisdiccion, true);
             _context.TJurisdiccionesUsuarios.Add(jurisdiccion);
         }
         else if (request.TipoEntidad == "PROVEEDOR")
         {
+            if (usuario.IdPersonaNavigation?.TProveedoresRepresentantes.Any(p => p.IdProveedor == request.IdEntidad && p.FecBaja == null) == true)
+                return BadRequest<bool>("El usuario ya es representante de este proveedor.");
+
             var representante = new TProveedoresRepresentante { IdPersona = usuario.IdPersona, IdProveedor = request.IdEntidad, EsApoderado = false };
             PrepareAuditableEntity(representante, true);
             _context.TProveedoresRepresentantes.Add(representante);
@@ -190,7 +227,7 @@ public class UserService : BaseService, IUserService
         await _context.SaveChangesAsync();
 
         await PublishSystemLogAsync(_publishEndpoint, "USUARIO_VINCULADO", "IAM",
-    new { Mensaje = $"Se vinculó el usuario {usuario.EmailLogin} como {request.TipoEntidad} (ID: {request.IdEntidad})" });
+            new { Mensaje = $"Se vinculó el usuario {usuario.EmailLogin} como {request.TipoEntidad} (ID: {request.IdEntidad})" });
 
         return Ok(true);
     }

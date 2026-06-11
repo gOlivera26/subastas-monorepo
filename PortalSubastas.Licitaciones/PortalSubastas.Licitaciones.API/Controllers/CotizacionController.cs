@@ -138,7 +138,15 @@ public class CotizacionController : BaseController
     public async Task<IActionResult> DesistirParticipacion(int id)
     {
         var result = await _cotizacionService.DesistirParticipacionAsync(id);
-        return Return(result);  
+        return Return(result);
+    }
+
+    [HttpGet("{id:int}/metricas-ahorro")]
+    [ProducesResponseType(typeof(OperationResponse<MetricasAhorroDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMetricasAhorro(int id)
+    {
+        var result = await _cotizacionService.GetMetricasAhorroAsync(id);
+        return Return(result);
     }
 
     [HttpGet("server-time")]

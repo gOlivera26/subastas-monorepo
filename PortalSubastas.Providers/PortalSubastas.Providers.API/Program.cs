@@ -1,13 +1,20 @@
 using PortalSubastas.Providers.API.Config;
 using PortalSubastas.Providers.API.Middlewares;
 
+TimeZoneInfo.ClearCachedData();
+Environment.SetEnvironmentVariable("TZ", "America/Argentina/Buenos_Aires");
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddConfig(builder.Configuration);
 
+builder.Services.AddOpenTelemetryTracing(builder.Configuration);
+
 var app = builder.Build();
 
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+
+app.UseOpenTelemetry();
 
 if (app.Environment.IsDevelopment())
 {

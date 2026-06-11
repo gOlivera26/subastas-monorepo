@@ -18,6 +18,7 @@ public interface ICotizacionService
     Task<OperationResponse<CotizacionResponseDto>> DesistirAsync(int id);
     Task<OperationResponse<List<SubastaDashboardDto>>> BuscarAsync(int? idVigencia, int? idEstado, int? idTipoContratacion, string? nro, string? expte, DateTime? fechaDesde, DateTime? fechaHasta);
     Task<OperationResponse<bool>> DesistirParticipacionAsync(int idCotizacion);
+    Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(int idCotizacion);
 
     // Endpoints específicos para el Dashboard
     Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasEnCursoAsync(int? idVigencia);

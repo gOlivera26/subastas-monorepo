@@ -24,7 +24,8 @@ public class AuditInterceptor : SaveChangesInterceptor
         if (context == null) return new ValueTask<InterceptionResult<int>>(result);
 
         var username = GetCurrentUsername();
-        var now = DateTime.Now;
+        var zoneAr = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
+        var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zoneAr);
 
         var entries = context.ChangeTracker.Entries()
             .Where(e => e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted)
@@ -124,7 +125,7 @@ public class AuditInterceptor : SaveChangesInterceptor
                 OperationType: audit.Operation,
                 OldValues: audit.OldValues.Count > 0 ? JsonSerializer.Serialize(audit.OldValues) : null,
                 NewValues: audit.NewValues.Count > 0 ? JsonSerializer.Serialize(audit.NewValues) : null,
-                OccurredAt: DateTime.UtcNow
+                OccurredAt: TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires"))
             );
 
             await _publishEndpoint.Publish(auditEvent, cancellationToken);

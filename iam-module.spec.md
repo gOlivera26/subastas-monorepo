@@ -356,3 +356,21 @@ sequenceDiagram
 - **Soft Delete**: todas las entidades que implementan `IFullAuditableEntity` tienen query filter global (`FecBaja == null`).
 - Las contraseñas se hashean con **BCrypt** (nunca en texto plano).
 - El token JWT tiene los claims: `NameIdentifier` (GUID), `Email`, `Name`, `Role`.
+
+### Auditoría (AuditInterceptor + PublishSystemLogAsync)
+
+- **AuditInterceptor**: Interceptor de EF Core que captura automáticamente todos los cambios (INSERT, UPDATE, DELETE) y publica `DataChangedEvent` vía MassTransit sin código manual en cada servicio.
+- **PublishSystemLogAsync**: Método en `BaseService` que publica `SystemLogEvent` con el módulo `"IAM"`, la acción, y detalles JSONB.
+
+**Acciones de auditoría registradas (8):**
+
+| Acción | Servicio | Trigger |
+|--------|----------|---------|
+| `INICIO_SESION` | AuthService | Login exitoso |
+| `NUEVO_REGISTRO` | AuthService | Registro de usuario |
+| `CAMBIO_PASSWORD` | AuthService | Cambio de contraseña |
+| `USUARIO_APROBADO` | UserService | Admin aprueba usuario |
+| `RESETEO_PASSWORD` | UserService | Admin resetea contraseña |
+| `USUARIO_DESVINCULADO` | UserService | Desvincular entidad (Gestor/Proveedor) |
+| `CAMBIO_ROL` | UserService | Cambio de rol de usuario |
+| `USUARIO_VINCULADO` | UserService | Vincular entidad (Gestor/Proveedor) |

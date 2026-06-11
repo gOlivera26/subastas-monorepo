@@ -14,17 +14,20 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
 {
     private new readonly PortalSubastasContext _context;
     private readonly ISubastaNotificationService _notificationService;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public OfertaSubastaService(
         PortalSubastasContext context,
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
-        ISubastaNotificationService notificationService)
+        ISubastaNotificationService notificationService,
+        IPublishEndpoint publishEndpoint)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _notificationService = notificationService;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<OperationResponse<List<OfertaItemResponseDto>>> ProcesarOfertasAsync(int idCotizacion, List<OfertaItemRequestDto> ofertas)
@@ -50,7 +53,6 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
         if (ahora > cotizacion.Especificacion?.FechaFinalizacionSubasta)
             return BadRequest<List<OfertaItemResponseDto>>("La subasta ya ha finalizado.");
 
-        // VALIDACIÓN ESTRICTA DE GARANTÍAS PREVIAS
         bool tieneGarantia = await _context.TGarantiasSubastas
             .AnyAsync(g => g.IdCotizacion == idCotizacion && g.IdProveedor == idProveedor.Value && g.FecBaja == null);
 
@@ -76,8 +78,16 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
                 IdRenglon = oferta.IdRenglon
             };
 
+            if (oferta.Monto <= 0)
+            {
+                resultItem.TextoError = "La oferta debe ser estrictamente mayor a $0.00.";
+                resultados.Add(resultItem);
+                continue;
+            }
+
             decimal mejorOfertaActual = 0;
             decimal precioBase = 0;
+            decimal? minOferta = null; // Para saber si es la primera oferta
 
             int? idMonedaRequerida = null;
             if (oferta.IdRenglon.HasValue)
@@ -97,14 +107,14 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
             {
                 resultItem.TextoError = "La moneda de la oferta no coincide con la moneda oficial estipulada en el pliego.";
                 resultados.Add(resultItem);
-                continue; // Frenamos esta oferta y seguimos con la siguiente
+                continue;
             }
 
             // 1. Obtener la Mejor Oferta Actual (Histórica) y el Precio Base
             if (oferta.IdRenglon.HasValue)
             {
                 precioBase = cotizacion.Detalles.Where(d => d.IdRenglon == oferta.IdRenglon).Sum(d => d.ImporteBase * d.Cantidad);
-                var minOferta = await _context.TOfertasSubastas
+                minOferta = await _context.TOfertasSubastas
                     .Where(o => o.IdRenglon == oferta.IdRenglon)
                     .MinAsync(o => (decimal?)o.Monto);
                 mejorOfertaActual = minOferta ?? precioBase;
@@ -114,18 +124,31 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
                 var detalle = cotizacion.Detalles.FirstOrDefault(d => d.IdCotizacionDetalle == oferta.IdCotizacionDetalle);
                 precioBase = detalle?.ImporteBase ?? 0;
 
-                var minOferta = await _context.TOfertasSubastas
+                minOferta = await _context.TOfertasSubastas
                     .Where(o => o.IdCotizacionDetalle == oferta.IdCotizacionDetalle)
                     .MinAsync(o => (decimal?)o.Monto);
                 mejorOfertaActual = minOferta ?? precioBase;
             }
 
             // 2. Calcular Tope Máximo (Fórmula Subasta Inversa)
-            decimal topeMaximoPermitido = mejorOfertaActual - (mejorOfertaActual * (margenMejora / 100m));
+            decimal topeMaximoPermitido;
+            if (minOferta.HasValue)
+            {
+                // Ya existen ofertas previas, aplicamos el margen de mejora exigido
+                topeMaximoPermitido = mejorOfertaActual - (mejorOfertaActual * (margenMejora / 100m));
+            }
+            else
+            {
+                // Es la PRIMERA oferta. Permitimos que oferte el precio base exacto.
+                topeMaximoPermitido = precioBase;
+            }
 
             if (oferta.Monto > topeMaximoPermitido)
             {
-                resultItem.TextoError = $"La oferta debe ser menor o igual a ${topeMaximoPermitido:N2} (Margen del {margenMejora}%).";
+                if (minOferta.HasValue)
+                    resultItem.TextoError = $"La oferta debe ser menor o igual a ${topeMaximoPermitido:N2} (Margen del {margenMejora}%).";
+                else
+                    resultItem.TextoError = $"La oferta inicial no puede superar el precio base (${topeMaximoPermitido:N2}).";
             }
             else
             {
@@ -211,6 +234,9 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
 
             await _context.SaveChangesAsync();
 
+            await PublishSystemLogAsync(_publishEndpoint, "OFERTAS_PROCESADAS", "LICITACIONES",
+                new { IdCotizacion = idCotizacion, IdProveedor = idProveedor.Value, OfertasRecibidas = ofertasValidas.Count, SubastaCerradaPorTope = subastaCerradaPorTope, Prorrogada = prorrogada });
+
             // 3. Notificaciones SignalR
             foreach (var ov in ofertasValidas)
             {
@@ -259,5 +285,35 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
             .ToListAsync();
 
         return Ok<object>(ofertas);
+    }
+
+    public async Task<OperationResponse<object>> GetMisOfertasAsync()
+    {
+        var idProveedor = GetUserProveedorId();
+        if (!idProveedor.HasValue)
+            return Unauthorized<object>("No eres un proveedor válido.");
+
+        var historial = await _context.TOfertasSubastas
+            .Include(o => o.IdCotizacionNavigation)
+                .ThenInclude(c => c.Especificacion)
+            .Include(o => o.IdCotizacionDetalleNavigation)
+            .Include(o => o.IdRenglonNavigation)
+            .Where(o => o.IdProveedor == idProveedor.Value && o.FecBaja == null)
+            .OrderByDescending(o => o.FechaOferta)
+            .Select(o => new {
+                o.FechaOferta,
+                Cotizacion = o.IdCotizacionNavigation.NroCotizacion,
+                Detalle = o.IdRenglonNavigation != null
+                    ? "Lote: " + o.IdRenglonNavigation.Descripcion
+                    : _context.TCatalogosBiens
+                        .Where(b => b.IdItem == o.IdCotizacionDetalleNavigation.IdItem)
+                        .Select(b => b.NItem)
+                        .FirstOrDefault() ?? "Ítem de Subasta",
+                o.Monto
+            })
+            .Take(50)
+            .ToListAsync();
+
+        return Ok<object>(historial);
     }
 }
