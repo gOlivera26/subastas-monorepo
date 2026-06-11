@@ -3,18 +3,24 @@
 public class UserService : BaseService, IUserService
 {
     private readonly PortalSubastasContext _context;
+    private readonly IConfiguration _configuration;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IEmailService _emailService;
 
     public UserService(
         PortalSubastasContext context,
+        IConfiguration configuration,
         IMapper mapper,
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
-        IPublishEndpoint publishEndpoint)
+        IPublishEndpoint publishEndpoint,
+        IEmailService emailService)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
+        _configuration = configuration;
         _publishEndpoint = publishEndpoint;
+        _emailService = emailService;
     }
 
     public async Task<OperationResponse<List<PendingUserDto>>> GetPendingUsersAsync()
@@ -32,7 +38,10 @@ public class UserService : BaseService, IUserService
 
     public async Task<OperationResponse<bool>> ApproveUserAsync(Guid userId)
     {
-        var usuario = await _context.TUsuarios.FindAsync(userId);
+        var usuario = await _context.TUsuarios
+            .Include(u => u.IdPersonaNavigation)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
         if (usuario == null) return NotFound<bool>();
         if (usuario.IdEstado != 4) return BadRequest<bool>("El usuario no está en estado pendiente.");
 
@@ -42,6 +51,22 @@ public class UserService : BaseService, IUserService
 
         PrepareAuditableEntity(usuario, isNew: false);
         await _context.SaveChangesAsync();
+
+        await _emailService.SendEmailAsync(
+            usuario.EmailLogin,
+            "Tu cuenta fue aprobada — Trasus Argentina",
+            $@"
+                <h2>¡Bienvenido a Trasus Argentina!</h2>
+                <p>Tu cuenta fue aprobada. Ya podés ingresar al sistema con tu email y contraseña.</p>
+                <p>
+                    <a href='{_configuration["Frontend:Url"]}/auth/login'
+                       style='display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;'>
+                        Ir al inicio de sesión
+                    </a>
+                </p>
+                <hr>
+                <small>Trasus Argentina — Portal de Subastas</small>
+            ");
 
         await PublishSystemLogAsync(_publishEndpoint, "USUARIO_APROBADO", "IAM",
             new { Mensaje = $"Cuenta aprobada el {usuario.FechaAprobacion?.ToLocalTime():dd/MM/yyyy HH:mm}" });
@@ -57,7 +82,7 @@ public class UserService : BaseService, IUserService
             .Include(u => u.IdEstadoNavigation)
             .Include(u => u.TJurisdiccionesUsuarios).ThenInclude(j => j.IdOrganizacionNavigation)
             .Include(u => u.IdPersonaNavigation.TProveedoresRepresentantes).ThenInclude(pr => pr.IdProveedorNavigation)
-            .Where(u => u.IdEstado != 4);
+            .Where(u => u.IdEstado != 4 && u.IdEstado != 8);
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {

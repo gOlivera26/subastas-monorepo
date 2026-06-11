@@ -5,6 +5,7 @@ public class AuthService : BaseService, IAuthService
     private readonly PortalSubastasContext _identityContext;
     private readonly IConfiguration _configuration;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IEmailService _emailService;
 
     public AuthService(
     PortalSubastasContext context,
@@ -12,12 +13,14 @@ public class AuthService : BaseService, IAuthService
     IMapper mapper,
     IHttpContextAccessor httpContextAccessor,
     IMemoryCache cache,
-    IPublishEndpoint publishEndpoint)
+    IPublishEndpoint publishEndpoint,
+    IEmailService emailService)
     : base(context, mapper, httpContextAccessor, cache)
     {
         _identityContext = context;
         _configuration = configuration;
         _publishEndpoint = publishEndpoint;
+        _emailService = emailService;
     }
 
     public async Task<OperationResponse<LoginResponseDto>> LoginAsync(LoginRequestDto request)
@@ -162,6 +165,8 @@ public class AuthService : BaseService, IAuthService
         if (docExiste)
             return BadRequest<LoginResponseDto>("El documento ya se encuentra registrado.");
 
+        string? codigoConfirmacion = null;
+
         var transactionResult = await InsertWithTransactionAsync(async () =>
         {
             var persona = new TPersona
@@ -179,13 +184,17 @@ public class AuthService : BaseService, IAuthService
             _identityContext.TPersonas.Add(persona);
             await _identityContext.SaveChangesAsync();
 
+            codigoConfirmacion = GenerarCodigoConfirmacion();
             var usuario = new TUsuario
             {
                 IdPersona = persona.Id,
                 IdRol = request.IdRol,
-                IdEstado = 4,
+                IdEstado = 8, // PENDIENTE_CONFIRMACION
                 EmailLogin = request.Email,
-                PasswordHash = BC.HashPassword(request.Password)
+                PasswordHash = BC.HashPassword(request.Password),
+                CodigoConfirmacion = codigoConfirmacion,
+                EmailConfirmado = false,
+                FechaEnvioCodigo = DateTime.UtcNow
             };
 
             PrepareAuditableEntity(usuario, isNew: true);
@@ -220,6 +229,19 @@ public class AuthService : BaseService, IAuthService
         {
             return InternalServerError<LoginResponseDto>($"Error al procesar el registro: {transactionResult.Message}");
         }
+
+        await _emailService.SendEmailAsync(
+            request.Email,
+            "Confirmá tu correo electrónico — Trasus Argentina",
+            $@"
+                <h2>Gracias por registrarte</h2>
+                <p>Tu código de confirmación es:</p>
+                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{codigoConfirmacion}</h1>
+                <p>Este código expira en 30 minutos.</p>
+                <p>Si no solicitaste este registro, ignorá este mensaje.</p>
+                <hr>
+                <small>Trasus Argentina — Portal de Subastas</small>
+            ");
 
         await PublishSystemLogAsync(_publishEndpoint, "NUEVO_REGISTRO", "IAM",
     new { Mensaje = $"Nuevo usuario registrado en el sistema: {request.Email} (Documento: {request.NroDocumento})" });
@@ -353,5 +375,104 @@ public class AuthService : BaseService, IAuthService
         var tokenHandler = new JwtSecurityTokenHandler();
         var token = tokenHandler.CreateToken(tokenDescriptor);
         return tokenHandler.WriteToken(token);
+    }
+
+    public async Task<OperationResponse<bool>> ConfirmarEmailAsync(ConfirmEmailRequestDto request)
+    {
+        var usuario = await _identityContext.TUsuarios
+            .Include(u => u.IdRolNavigation)
+            .FirstOrDefaultAsync(u => u.EmailLogin == request.Email);
+
+        if (usuario == null)
+            return NotFound<bool>();
+
+        if (usuario.IdEstado != 8)
+            return BadRequest<bool>("El usuario no está pendiente de confirmación de email.");
+
+        if (usuario.CodigoConfirmacion != request.Codigo)
+            return BadRequest<bool>("El código de confirmación es incorrecto.");
+
+        if (usuario.FechaEnvioCodigo.HasValue &&
+            DateTime.UtcNow > usuario.FechaEnvioCodigo.Value.AddMinutes(30))
+            return BadRequest<bool>("El código de confirmación expiró. Solicitá uno nuevo.");
+
+        usuario.IdEstado = 4; // PENDIENTE (esperando aprobación del admin)
+        usuario.EmailConfirmado = true;
+        usuario.CodigoConfirmacion = null;
+        usuario.FechaEnvioCodigo = null;
+
+        PrepareAuditableEntity(usuario, isNew: false);
+        await _identityContext.SaveChangesAsync();
+
+        // Notificar a todos los SUPERADMIN
+        await NotificarSuperadminsNuevoUsuarioAsync(usuario);
+
+        await PublishSystemLogAsync(_publishEndpoint, "EMAIL_CONFIRMADO", "IAM",
+            new { Mensaje = $"El usuario {usuario.EmailLogin} confirmó su correo electrónico." });
+
+        return Ok(true);
+    }
+
+    public async Task<OperationResponse<bool>> ReenviarCodigoAsync(string email)
+    {
+        var usuario = await _identityContext.TUsuarios.FirstOrDefaultAsync(u => u.EmailLogin == email);
+
+        if (usuario == null)
+            return NotFound<bool>();
+
+        if (usuario.IdEstado != 8)
+            return BadRequest<bool>("El usuario no está pendiente de confirmación de email.");
+
+        var nuevoCodigo = GenerarCodigoConfirmacion();
+        usuario.CodigoConfirmacion = nuevoCodigo;
+        usuario.FechaEnvioCodigo = DateTime.UtcNow;
+
+        PrepareAuditableEntity(usuario, isNew: false);
+        await _identityContext.SaveChangesAsync();
+
+        await _emailService.SendEmailAsync(
+            email,
+            "Nuevo código de confirmación — Trasus Argentina",
+            $@"
+                <h2>Acá va tu nuevo código</h2>
+                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{nuevoCodigo}</h1>
+                <p>Este código expira en 30 minutos.</p>
+                <p>Si no solicitaste este registro, ignorá este mensaje.</p>
+                <hr>
+                <small>Trasus Argentina — Portal de Subastas</small>
+            ");
+
+        return Ok(true);
+    }
+
+    private static string GenerarCodigoConfirmacion()
+        => Random.Shared.Next(100_000, 999_999).ToString();
+
+    private async Task NotificarSuperadminsNuevoUsuarioAsync(TUsuario usuario)
+    {
+        var rolSuperadmin = await _identityContext.TRoles
+            .FirstOrDefaultAsync(r => r.Nombre == "SUPERADMIN");
+
+        if (rolSuperadmin == null) return;
+
+        var superadmins = await _identityContext.TUsuarios
+            .Include(u => u.IdPersonaNavigation)
+            .Where(u => u.IdRol == rolSuperadmin.Id && u.FecBaja == null)
+            .ToListAsync();
+
+        foreach (var admin in superadmins)
+        {
+            await _emailService.SendEmailAsync(
+                admin.EmailLogin,
+                "Nuevo usuario pendiente de aprobación — Trasus Argentina",
+                $@"
+                    <h2>Nuevo registro en el sistema</h2>
+                    <p>El usuario <strong>{usuario.IdPersonaNavigation?.Nombre} {usuario.IdPersonaNavigation?.Apellido}</strong>
+                    ({usuario.EmailLogin}) confirmó su correo y está esperando aprobación.</p>
+                    <p>Ingresá al panel de administración para revisar la solicitud.</p>
+                    <hr>
+                    <small>Trasus Argentina — Portal de Subastas</small>
+                ");
+        }
     }
 }

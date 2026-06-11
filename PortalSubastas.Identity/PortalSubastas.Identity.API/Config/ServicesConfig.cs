@@ -1,4 +1,6 @@
-﻿namespace PortalSubastas.Identity.API.Config;
+﻿using Resend;
+
+namespace PortalSubastas.Identity.API.Config;
 
 public static class ServicesConfig
 {
@@ -49,6 +51,9 @@ public static class ServicesConfig
         });
 
         services.AddInternalServices();
+
+        services.AddResend(options =>
+            options.ApiToken = configuration["Resend:ApiKey"]!);
 
         services.AddControllers();
 
@@ -145,6 +150,7 @@ public static class ServicesConfig
 
     private static void AddInternalServices(this IServiceCollection services)
     {
+        services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IOrganizationService, OrganizationService>();
         services.AddScoped<IUserService, UserService>();
