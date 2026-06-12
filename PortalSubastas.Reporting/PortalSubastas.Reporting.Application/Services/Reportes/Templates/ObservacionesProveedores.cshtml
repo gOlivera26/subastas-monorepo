@@ -28,7 +28,6 @@
         th { background: #f3f4f6; font-size: 9px; text-transform: uppercase; }
         .number { text-align: right; white-space: nowrap; }
         .empty { border: 1px dashed #d1d5db; color: #6b7280; margin-top: 14px; padding: 8px; }
-        .note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; color: #1e3a8a; margin-top: 12px; padding: 8px; }
     </style>
 </head>
 <body>
@@ -48,10 +47,6 @@
         <div class="card"><span class="label">Límite impugnación</span><span class="value">@FormatDate(Model.Cabecera.FechaLimiteImpugnar)</span></div>
         <div class="card"><span class="label">Emitido</span><span class="value">@fechaEmision</span></div>
     </section>
-
-    <div class="note">
-        Reporte readecuado al modelo nuevo. Legacy se guiaba por COTPROV.OBSERVACIONES; en el modelo actual se muestran las observaciones disponibles sin modificar esquema.
-    </div>
 
     @if (!Model.Observaciones.Any())
     {

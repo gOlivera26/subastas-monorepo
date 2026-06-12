@@ -32,7 +32,7 @@ public sealed class ReportService : IReportService
             new ReporteCatalogoResponseDto(
                 Codigo: "detalle-subasta",
                 Nombre: "Detalle de subasta",
-                Descripcion: "Reporte ID 3 readecuado a la nueva logica: cabecera, items y proveedores participantes/invitados.",
+                Descripcion: "Detalle general de la subasta con sus items y proveedores participantes.",
                 FormatosDisponibles: ["html", "pdf"]),
             new ReporteCatalogoResponseDto(
                 Codigo: "proveedores-invitados",
@@ -42,27 +42,27 @@ public sealed class ReportService : IReportService
             new ReporteCatalogoResponseDto(
                 Codigo: "preguntas-respuestas",
                 Nombre: "Preguntas y respuestas",
-                Descripcion: "Reporte ID 4 readecuado a la nueva logica: consultas realizadas por proveedores y respuestas del organismo.",
+                Descripcion: "Consultas realizadas por proveedores y respuestas del organismo.",
                 FormatosDisponibles: ["html", "pdf"]),
             new ReporteCatalogoResponseDto(
                 Codigo: "desistimiento",
                 Nombre: "Desistimiento de subasta",
-                Descripcion: "Reporte ID 5 readecuado a la nueva logica: constancia de desistimiento y observaciones disponibles.",
+                Descripcion: "Constancia de desistimiento de la subasta y sus observaciones.",
                 FormatosDisponibles: ["html", "pdf"]),
             new ReporteCatalogoResponseDto(
                 Codigo: "observaciones-proveedores",
                 Nombre: "Observaciones de proveedores",
-                Descripcion: "Reporte ID 21 readecuado a la nueva logica: cabecera de impugnacion y observaciones disponibles.",
+                Descripcion: "Observaciones realizadas por proveedores sobre la subasta.",
                 FormatosDisponibles: ["html", "pdf"]),
             new ReporteCatalogoResponseDto(
                 Codigo: "auditoria-subasta",
                 Nombre: "Auditoria de subasta",
-                Descripcion: "Reporte ID 10 readecuado a la nueva logica: resumen de documentos, ofertas y proveedores por subasta.",
+                Descripcion: "Detalle de movimientos disponibles y resumen de documentos, ofertas y proveedores de la subasta.",
                 FormatosDisponibles: ["html", "pdf"]),
             new ReporteCatalogoResponseDto(
                 Codigo: "verificacion-documentacion",
                 Nombre: "Verificacion de documentacion",
-                Descripcion: "Reporte ID 9 readecuado: documentacion y garantias presentadas en el modelo nuevo, sin inventar estados legacy.",
+                Descripcion: "Documentacion y garantias presentadas por los proveedores.",
                 FormatosDisponibles: ["html", "pdf"])
         ];
     }

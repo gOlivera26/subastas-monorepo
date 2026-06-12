@@ -770,7 +770,7 @@ public class CotizacionService : BaseService, ICotizacionService
     {
         var entity = _mapper.Map<TCotizacion>(dto);
         
-        // Logica legacy de inicialización
+        // Inicializacion de la cotizacion
         entity.IdEstado = 4; // Generado
         entity.IdOrganizacion = GetUserOrganizationId() ?? dto.IdOrganizacion;
         if (entity.IdOrganizacion == 0) entity.IdOrganizacion = 1; // fallback
@@ -856,7 +856,7 @@ public class CotizacionService : BaseService, ICotizacionService
         if (entity.IdEstado != 4)
             return BadRequest<bool>("Solo se puede anular una subasta en estado Generado.");
 
-        entity.IdEstado = 20; // Anulado (baja lógica según legacy)
+        entity.IdEstado = 20; // Anulado
         PrepareAuditableEntity(entity, isNew: false, isDeleted: true);
 
         await _context.SaveChangesAsync();
@@ -911,33 +911,19 @@ public class CotizacionService : BaseService, ICotizacionService
 
         var proveedorIds = proveedoresActivos.Select(p => p.IdProveedor).Distinct().ToList();
 
-        // Resolver emails y nombres desde negocio.t_proveedores
-        var proveedoresInfo = new List<ProveedorInfo>();
-        var dbConnection = _context.Database.GetDbConnection();
-        await dbConnection.OpenAsync();
-
-        try
-        {
-            await using var cmd = dbConnection.CreateCommand();
-            cmd.CommandText = "SELECT id, email_institucional, razon_social FROM negocio.t_proveedores WHERE id = ANY(@ids) AND fec_baja IS NULL";
-            var param = cmd.CreateParameter();
-            param.ParameterName = "ids";
-            param.Value = proveedorIds;
-            cmd.Parameters.Add(param);
-
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
+        var providers = await _providerLookupService.GetByIdsAsync(proveedorIds);
+        var proveedoresInfo = proveedorIds
+            .Select(id =>
             {
-                var idProv = reader.GetInt32(0);
-                var email = reader.IsDBNull(1) ? null : reader.GetString(1);
-                var nombre = reader.IsDBNull(2) ? null : reader.GetString(2);
-                proveedoresInfo.Add(new ProveedorInfo(idProv, email ?? "", nombre ?? ""));
-            }
-        }
-        finally
-        {
-            // No cerramos la conexión aquí — la maneja EF Core
-        }
+                providers.TryGetValue(id, out var provider);
+                var email = !string.IsNullOrWhiteSpace(provider?.EmailInstitucional)
+                    ? provider.EmailInstitucional
+                    : provider?.EmailAlternativo ?? string.Empty;
+                var nombre = provider?.RazonSocial ?? $"Proveedor {id}";
+
+                return new ProveedorInfo(id, email, nombre);
+            })
+            .ToList();
 
         if (proveedoresInfo.Count == 0)
         {
@@ -1274,7 +1260,7 @@ public class CotizacionService : BaseService, ICotizacionService
                 FechaInicioSubasta = cotizacion.Especificacion?.FechaInicioSubasta,
                 FechaFinalizacionSubasta = cotizacion.Especificacion?.FechaFinalizacionSubasta,
                 FechaEmision = DateTimeOffset.UtcNow,
-                NotaAdecuacion = "Reporte 9 readecuado: el legacy leia T_DOC_ADJ_LICITACION.VERIFICADO; el modelo nuevo no expone estado de verificacion/rechazo por documento, por eso se informan documentos y garantias presentadas sin inventar estado legacy."
+                NotaAdecuacion = "Se informan los documentos y garantias presentadas para la subasta."
             },
             Documentos = documentos
                 .OrderBy(d => d.Origen)

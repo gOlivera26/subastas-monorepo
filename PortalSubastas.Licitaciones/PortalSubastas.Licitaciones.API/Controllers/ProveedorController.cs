@@ -1,9 +1,9 @@
-using System.Data.Common;
 using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PortalSubastas.Contracts.Events;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
+using PortalSubastas.Licitaciones.Application.Services.Interfaces;
 using PortalSubastas.Licitaciones.Domain.Models;
 
 namespace PortalSubastas.Licitaciones.API.Controllers;
@@ -16,6 +16,7 @@ public class ProveedorController : ControllerBase
     private readonly PortalSubastasContext _context;
     private readonly IHttpContextAccessor _http;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IProviderLookupService _providerLookupService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ProveedorController> _logger;
 
@@ -23,12 +24,14 @@ public class ProveedorController : ControllerBase
         PortalSubastasContext context,
         IHttpContextAccessor http,
         IPublishEndpoint publishEndpoint,
+        IProviderLookupService providerLookupService,
         IConfiguration configuration,
         ILogger<ProveedorController> logger)
     {
         _context = context;
         _http = http;
         _publishEndpoint = publishEndpoint;
+        _providerLookupService = providerLookupService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -49,7 +52,6 @@ public class ProveedorController : ControllerBase
         if (await _context.TCotizacionProveedores.AnyAsync(p => p.IdCotizacion == idCotizacion && p.IdProveedor == dto.IdProveedor && p.FecBaja == null))
             return BadRequest(OperationResponse<object>.CustomErrorResponse(400, "El proveedor ya está asignado."));
 
-        // Resolver email y nombre del proveedor desde negocio.t_proveedores
         var (email, nombre) = await GetProveedorDataAsync(dto.IdProveedor);
         if (email == null)
             return BadRequest(OperationResponse<object>.CustomErrorResponse(400, "Proveedor no encontrado o inactivo."));
@@ -112,22 +114,15 @@ public class ProveedorController : ControllerBase
     {
         try
         {
-            var dbConnection = _context.Database.GetDbConnection();
-            await dbConnection.OpenAsync();
-            await using var cmd = dbConnection.CreateCommand();
-            cmd.CommandText = "SELECT email_institucional, razon_social FROM negocio.t_proveedores WHERE id = @id AND fec_baja IS NULL";
-            var param = cmd.CreateParameter();
-            param.ParameterName = "id";
-            param.Value = idProveedor;
-            cmd.Parameters.Add(param);
+            var providers = await _providerLookupService.GetByIdsAsync([idProveedor]);
+            if (!providers.TryGetValue(idProveedor, out var provider))
+                return (null, null);
 
-            await using var reader = await cmd.ExecuteReaderAsync();
-            if (await reader.ReadAsync())
-            {
-                var email = reader.IsDBNull(0) ? null : reader.GetString(0);
-                var nombre = reader.IsDBNull(1) ? null : reader.GetString(1);
-                return (email, nombre);
-            }
+            var email = !string.IsNullOrWhiteSpace(provider.EmailInstitucional)
+                ? provider.EmailInstitucional
+                : provider.EmailAlternativo ?? string.Empty;
+
+            return (email, provider.RazonSocial);
         }
         catch (Exception ex)
         {

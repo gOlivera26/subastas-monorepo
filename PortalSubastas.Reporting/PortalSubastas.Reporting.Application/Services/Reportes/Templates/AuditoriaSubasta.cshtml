@@ -30,7 +30,6 @@
         th, td { border: 1px solid #d1d5db; padding: 6px; text-align: left; vertical-align: top; }
         th { background: #f3f4f6; font-size: 9px; text-transform: uppercase; }
         .number { text-align: right; white-space: nowrap; }
-        .note { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; color: #1e3a8a; margin-top: 12px; padding: 8px; }
     </style>
 </head>
 <body>
@@ -58,11 +57,6 @@
         <div class="metric"><span class="label">Ofertas</span><span class="value">@Model.Resumen.CantidadOfertas</span></div>
         <div class="metric"><span class="label">Proveedores</span><span class="value">@Model.Resumen.CantidadProveedores</span></div>
     </section>
-
-    <div class="note">
-        Reporte ID 10 readecuado al modelo nuevo. Legacy lo armaba con SUBASTA_REPORTE_AUDITORIA contando documentos, ofertas y proveedores por cotizacion.
-        Aca se calcula sobre las tablas actuales sin modificar esquema.
-    </div>
 
     <h2>Detalle de movimientos disponibles</h2>
     <table>
