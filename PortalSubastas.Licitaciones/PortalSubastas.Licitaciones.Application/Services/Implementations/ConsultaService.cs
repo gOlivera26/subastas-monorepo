@@ -48,7 +48,7 @@ public class ConsultaService : BaseService, IConsultaService
 
         if (cotizacion == null) return NotFound<ConsultaResponseDto>();
 
-        // 1. Validar Límite de Fechas (Regla de negocio del Legacy)
+        // 1. Validar limite de fechas para consultas
         if (cotizacion.Especificacion?.FechaLimiteConsultas < DateTime.Now)
             return BadRequest<ConsultaResponseDto>("Se venció el plazo límite para realizar preguntas.");
 

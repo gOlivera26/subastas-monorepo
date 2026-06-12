@@ -1,0 +1,38 @@
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    xdg-utils \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+EXPOSE 8080
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["PortalSubastas.Reporting/PortalSubastas.Reporting.API/PortalSubastas.Reporting.API.csproj", "PortalSubastas.Reporting/PortalSubastas.Reporting.API/"]
+COPY ["PortalSubastas.Reporting/PortalSubastas.Reporting.Application/PortalSubastas.Reporting.Application.csproj", "PortalSubastas.Reporting/PortalSubastas.Reporting.Application/"]
+COPY ["PortalSubastas.Reporting/PortalSubastas.Reporting.Domain/PortalSubastas.Reporting.Domain.csproj", "PortalSubastas.Reporting/PortalSubastas.Reporting.Domain/"]
+COPY ["PortalSubastas.Contracts/PortalSubastas.Contracts.csproj", "PortalSubastas.Contracts/"]
+RUN dotnet restore "PortalSubastas.Reporting/PortalSubastas.Reporting.API/PortalSubastas.Reporting.API.csproj"
+COPY . .
+WORKDIR "/src/PortalSubastas.Reporting/PortalSubastas.Reporting.API"
+RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "PortalSubastas.Reporting.API.dll"]
