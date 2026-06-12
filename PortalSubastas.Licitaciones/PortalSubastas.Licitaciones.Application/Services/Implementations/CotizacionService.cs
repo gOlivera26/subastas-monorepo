@@ -1,5 +1,7 @@
-using System.Data.Common;
+using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using PortalSubastas.Contracts.Events;
 using PortalSubastas.Licitaciones.Application.RequestDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion;
@@ -14,13 +16,15 @@ public class CotizacionService : BaseService, ICotizacionService
     private readonly PortalSubastasContext _context;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<CotizacionService> _logger;
+    private readonly IProveedorRepresentanteService _proveedorRepresentanteService;
 
-    public CotizacionService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache, IPublishEndpoint publishEndpoint, ILogger<CotizacionService> logger)
+    public CotizacionService(PortalSubastasContext context, IMapper mapper, IHttpContextAccessor httpContextAccessor, IMemoryCache cache, IPublishEndpoint publishEndpoint, ILogger<CotizacionService> logger, IProveedorRepresentanteService proveedorRepresentanteService)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
+        _proveedorRepresentanteService = proveedorRepresentanteService;
     }
 
     public async Task<OperationResponse<List<CotizacionResponseDto>>> GetAllAsync(int? idVigencia)
@@ -56,7 +60,7 @@ public class CotizacionService : BaseService, ICotizacionService
 
         var dto = _mapper.Map<CotizacionResponseDto>(entity);
 
-        dto.Tipo = entity.IdTipoContratacion switch { 7 => "Subasta Inversa", 9 => "Subasta Directa", 13 => "Subasta Inversa Monto Fijo", 15 => "Subasta Inversa SEEC", _ => "Subasta" };
+        dto.Tipo = entity.IdTipoContratacion.ToDisplayName();
         dto.Estado = GetEstadoNombre(entity.IdEstado);
         dto.Modalidad = entity.Especificacion?.Redeterminacion switch { "1" => "Pública", "0" => "Privada", "2" => "Cerrada", _ => "No definida" };
 
@@ -259,33 +263,18 @@ public class CotizacionService : BaseService, ICotizacionService
 
         var proveedorIds = proveedoresActivos.Select(p => p.IdProveedor).Distinct().ToList();
 
-        // Resolver emails y nombres desde negocio.t_proveedores
-        var proveedoresInfo = new List<ProveedorInfo>();
-        var dbConnection = _context.Database.GetDbConnection();
-        await dbConnection.OpenAsync();
-
-        try
-        {
-            await using var cmd = dbConnection.CreateCommand();
-            cmd.CommandText = "SELECT id, email_institucional, razon_social FROM negocio.t_proveedores WHERE id = ANY(@ids) AND fec_baja IS NULL";
-            var param = cmd.CreateParameter();
-            param.ParameterName = "ids";
-            param.Value = proveedorIds;
-            cmd.Parameters.Add(param);
-
-            await using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var idProv = reader.GetInt32(0);
-                var email = reader.IsDBNull(1) ? null : reader.GetString(1);
-                var nombre = reader.IsDBNull(2) ? null : reader.GetString(2);
-                proveedoresInfo.Add(new ProveedorInfo(idProv, email ?? "", nombre ?? ""));
-            }
-        }
-        finally
-        {
-            // No cerramos la conexión aquí — la maneja EF Core
-        }
+        // Resolver emails y nombres desde representantes con LINQ
+        var proveedoresInfo = await _context.TProveedoresRepresentantes
+            .Include(r => r.IdPersonaNavigation)
+            .Where(r => proveedorIds.Contains(r.IdProveedor)
+                && r.IdPersonaNavigation.EmailContacto != null
+                && r.IdPersonaNavigation.EmailContacto != "")
+            .Select(r => new ProveedorInfo(
+                r.IdProveedor,
+                r.IdPersonaNavigation.EmailContacto,
+                r.IdPersonaNavigation.Nombre + " " + r.IdPersonaNavigation.Apellido
+            ))
+            .ToListAsync();
 
         if (proveedoresInfo.Count == 0)
         {
@@ -293,14 +282,7 @@ public class CotizacionService : BaseService, ICotizacionService
             return;
         }
 
-        string tipoNombre = entity.IdTipoContratacion switch
-        {
-            7 => "Subasta Inversa",
-            9 => "Subasta Directa",
-            13 => "Subasta Inversa Monto Fijo",
-            15 => "Subasta Inversa SEEC",
-            _ => "Subasta"
-        };
+        var tipoNombre = entity.IdTipoContratacion.ToDisplayName();
 
         var subastaEvent = new SubastaPublicadaEvent(
             IdCotizacion: entity.IdCotizacion,
@@ -356,6 +338,46 @@ public class CotizacionService : BaseService, ICotizacionService
         await _context.SaveChangesAsync();
 
         await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_DESISTIDA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
+
+        // 3. Publicar SubastaDesistidaEvent para email a proveedores
+        try
+        {
+            var proveedores = await _context.TCotizacionProveedores
+                .Where(p => p.IdCotizacion == id && p.FecBaja == null)
+                .ToListAsync();
+
+            if (proveedores.Count != 0)
+            {
+                var proveedoresInfo = new List<ProveedorInfo>();
+                foreach (var prov in proveedores)
+                {
+                    var representantes = await GetRepresentantesAsync(prov.IdProveedor);
+                    foreach (var (email, nombre) in representantes)
+                    {
+                        proveedoresInfo.Add(new ProveedorInfo(prov.IdProveedor, email, nombre));
+                    }
+                }
+
+                if (proveedoresInfo.Count != 0)
+                {
+                    var tipoNombre = entity.IdTipoContratacion.ToDisplayName();
+
+                    await _publishEndpoint.Publish(new SubastaDesistidaEvent(
+                        IdCotizacion: id,
+                        NroCotizacion: entity.NroCotizacion ?? "",
+                        Titulo: entity.Observacion ?? "Subasta " + (entity.NroCotizacion ?? ""),
+                        Motivo: entity.Observacion ?? "Sin motivo especificado",
+                        TipoContratacion: tipoNombre,
+                        Proveedores: proveedoresInfo,
+                        OccuredOn: DateTime.UtcNow
+                    ));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ No se pudo publicar SubastaDesistidaEvent para Cotización {IdCotizacion}", id);
+        }
 
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
@@ -481,6 +503,48 @@ public class CotizacionService : BaseService, ICotizacionService
 
         await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PRORROGADA", "LICITACIONES", new { entity.IdCotizacion, Minutos = minutos, NuevaFechaFin = entity.Especificacion?.FechaFinalizacionSubasta });
 
+        // 3. Publicar SubastaProrrogadaEvent para email a proveedores
+        try
+        {
+            var proveedores = await _context.TCotizacionProveedores
+                .Where(p => p.IdCotizacion == id && p.FecBaja == null)
+                .ToListAsync();
+
+            if (proveedores.Count != 0)
+            {
+                var proveedoresInfo = new List<ProveedorInfo>();
+                foreach (var prov in proveedores)
+                {
+                    var representantes = await GetRepresentantesAsync(prov.IdProveedor);
+                    foreach (var (email, nombre) in representantes)
+                    {
+                        proveedoresInfo.Add(new ProveedorInfo(prov.IdProveedor, email, nombre));
+                    }
+                }
+
+                if (proveedoresInfo.Count != 0)
+                {
+                    var tipoNombre = entity.IdTipoContratacion.ToDisplayName();
+
+                    await _publishEndpoint.Publish(new SubastaProrrogadaEvent(
+                        IdCotizacion: id,
+                        NroCotizacion: entity.NroCotizacion ?? "",
+                        Titulo: entity.Observacion ?? "Subasta " + (entity.NroCotizacion ?? ""),
+                        FechaFinOriginal: entity.Especificacion?.FechaFinalizacionSubasta?.AddMinutes(-minutos),
+                        FechaFinNueva: entity.Especificacion?.FechaFinalizacionSubasta,
+                        MinutosAgregados: minutos,
+                        TipoContratacion: tipoNombre,
+                        Proveedores: proveedoresInfo,
+                        OccuredOn: DateTime.UtcNow
+                    ));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ No se pudo publicar SubastaProrrogadaEvent para Cotización {IdCotizacion}", id);
+        }
+
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
     }
 
@@ -584,14 +648,7 @@ public class CotizacionService : BaseService, ICotizacionService
         {
             IdCotizacion = c.IdCotizacion,
             NroCotizacion = c.NroCotizacion,
-            Tipo = c.IdTipoContratacion switch
-            {
-                7 => "Subasta Inversa",
-                9 => "Subasta Directa",
-                13 => "Subasta Inversa Monto Fijo",
-                15 => "Subasta Inversa SEEC",
-                _ => "Subasta"
-            },
+            Tipo = c.IdTipoContratacion.ToDisplayName(),
             Titulo = c.Observacion ?? "Subasta " + c.NroCotizacion,
             UnidadAdm = c.IdUnidadAdmNavigation?.NombreUnidadAdm ?? "",
             FechaFin = c.Especificacion?.FechaFinalizacionSubasta
@@ -690,14 +747,7 @@ public class CotizacionService : BaseService, ICotizacionService
         {
             IdCotizacion = entity.IdCotizacion,
             NroCotizacion = entity.NroCotizacion,
-            Tipo = entity.IdTipoContratacion switch
-            {
-                7 => "Subasta Inversa",
-                9 => "Subasta Directa",
-                13 => "Subasta Inversa Monto Fijo",
-                15 => "Subasta Inversa SEEC",
-                _ => "Subasta"
-            },
+            Tipo = entity.IdTipoContratacion.ToDisplayName(),
             Titulo = entity.Observacion ?? "Subasta " + entity.NroCotizacion,
             UnidadAdm = entity.IdUnidadAdmNavigation?.NombreUnidadAdm ?? "",
             FechaFin = entity.Especificacion.FechaFinalizacionSubasta,
@@ -717,15 +767,6 @@ public class CotizacionService : BaseService, ICotizacionService
         _ => "Desconocido"
     };
 
-    private string GetTipoContratacionNombre(int idTipo) => idTipo switch
-    {
-        7 => "Subasta Electrónica Inversa",
-        9 => "Subasta Electrónica Directa",
-        13 => "Subasta Inversa Monto Fijo",
-        15 => "Subasta Inversa SEEC",
-        _ => "Subasta"
-    };
-
     private List<SubastaDashboardDto> MapToDashboard(List<TCotizacion> data)
     {
         return data.Select(c => new SubastaDashboardDto
@@ -734,8 +775,8 @@ public class CotizacionService : BaseService, ICotizacionService
             IdEstado = c.IdEstado,
             NroCotizacion = c.NroCotizacion,
             IdTipoContratacion = c.IdTipoContratacion,
-            TipoContratacion = GetTipoContratacionNombre(c.IdTipoContratacion),
-            Tipo = c.IdTipoContratacion == 7 ? "Subasta Inversa" : "Subasta Directa",
+            TipoContratacion = c.IdTipoContratacion.ToDisplayName(),
+            Tipo = c.IdTipoContratacion.ToDisplayName(),
             Estado = GetEstadoNombre(c.IdEstado),
             Titulo = c.Observacion ?? "Subasta " + c.NroCotizacion,
             UnidadAdm = c.IdUnidadAdmNavigation?.NombreUnidadAdm ?? "",
@@ -755,4 +796,7 @@ public class CotizacionService : BaseService, ICotizacionService
             FechaAperturaSobreDos = c.Especificacion?.FechaAperturaSobreDos
         }).ToList();
     }
+
+    private async Task<List<(string Email, string NombrePersona)>> GetRepresentantesAsync(int idProveedor)
+        => await _proveedorRepresentanteService.GetRepresentantesAsync(idProveedor);
 }

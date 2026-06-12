@@ -21,6 +21,11 @@ builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<ProveedorInvitadoConsumer>();
     x.AddConsumer<SubastaPublicadaConsumer>();
+    x.AddConsumer<PreguntaRealizadaConsumer>();
+    x.AddConsumer<PreguntaRespondidaConsumer>();
+    x.AddConsumer<SubastaProrrogadaConsumer>();
+    x.AddConsumer<SubastaDesistidaConsumer>();
+    x.AddConsumer<GanadorRegistradoConsumer>();
 
     x.UsingRabbitMq((context, cfg) =>
     {
@@ -40,6 +45,31 @@ builder.Services.AddMassTransit(x =>
         cfg.ReceiveEndpoint("email-subasta-publicada-queue", e =>
         {
             e.ConfigureConsumer<SubastaPublicadaConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("email-pregunta-realizada-queue", e =>
+        {
+            e.ConfigureConsumer<PreguntaRealizadaConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("email-pregunta-respondida-queue", e =>
+        {
+            e.ConfigureConsumer<PreguntaRespondidaConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("email-subasta-prorrogada-queue", e =>
+        {
+            e.ConfigureConsumer<SubastaProrrogadaConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("email-subasta-desistida-queue", e =>
+        {
+            e.ConfigureConsumer<SubastaDesistidaConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("email-ganador-registrado-queue", e =>
+        {
+            e.ConfigureConsumer<GanadorRegistradoConsumer>(context);
         });
     });
 });

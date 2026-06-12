@@ -180,6 +180,8 @@ public static class ServicesConfig
         services.AddScoped<IFileStorageService, CloudflareR2StorageService>();
         services.AddScoped<ICotizacionDocumentoService, CotizacionDocumentoService>();
         services.AddScoped<IDocumentoItemService, DocumentoItemService>();
+        services.AddScoped<IProveedorRepresentanteService, ProveedorRepresentanteService>();
+        services.AddScoped<IProveedorService, ProveedorService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)
