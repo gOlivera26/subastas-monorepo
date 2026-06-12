@@ -1,6 +1,9 @@
+using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PortalSubastas.Contracts.Events;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
+using PortalSubastas.Licitaciones.Application.Services.Interfaces;
 using PortalSubastas.Licitaciones.Domain.Models;
 
 namespace PortalSubastas.Licitaciones.API.Controllers;
@@ -12,11 +15,22 @@ public class ProveedorController : ControllerBase
 {
     private readonly PortalSubastasContext _context;
     private readonly IHttpContextAccessor _http;
+    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<ProveedorController> _logger;
+    private readonly IProveedorService _proveedorService;
 
-    public ProveedorController(PortalSubastasContext context, IHttpContextAccessor http)
+    public ProveedorController(
+        PortalSubastasContext context,
+        IHttpContextAccessor http,
+        IPublishEndpoint publishEndpoint,
+        ILogger<ProveedorController> logger,
+        IProveedorService proveedorService)
     {
         _context = context;
         _http = http;
+        _publishEndpoint = publishEndpoint;
+        _logger = logger;
+        _proveedorService = proveedorService;
     }
 
     [HttpGet]
@@ -30,22 +44,13 @@ public class ProveedorController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Add(int idCotizacion, [FromBody] ProveedorAddDto dto)
+    public async Task<IActionResult> Add(int idCotizacion, [FromBody] Application.RequestDto.Proveedor.ProveedorAddDto dto)
     {
-        if (await _context.TCotizacionProveedores.AnyAsync(p => p.IdCotizacion == idCotizacion && p.IdProveedor == dto.IdProveedor && p.FecBaja == null))
-            return BadRequest(OperationResponse<object>.CustomErrorResponse(400, "El proveedor ya está asignado."));
+        var result = await _proveedorService.AddProveedorAsync(idCotizacion, dto);
+        if (result.Success == false)
+            return BadRequest(result);
 
-        var entity = new TCotizacionProveedor
-        {
-            IdCotizacion = idCotizacion,
-            IdProveedor = dto.IdProveedor,
-            Ganadora = dto.Ganadora ?? "N",
-            UsrIng = _http.HttpContext?.User?.Identity?.Name ?? "SISTEMA",
-            FecIng = DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Unspecified)
-        };
-        _context.TCotizacionProveedores.Add(entity);
-        await _context.SaveChangesAsync();
-        return Ok(OperationResponse<object>.SuccessResponse(new { entity.IdCotizacionProveedor }));
+        return Ok(result);
     }
 
     [HttpDelete("{id:int}")]
@@ -59,10 +64,4 @@ public class ProveedorController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok(OperationResponse<bool>.SuccessResponse(true));
     }
-}
-
-public class ProveedorAddDto
-{
-    public int IdProveedor { get; set; }
-    public string? Ganadora { get; set; }
 }

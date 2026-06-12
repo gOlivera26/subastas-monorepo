@@ -44,6 +44,8 @@ public partial class PortalSubastasContext : DbContext
     public virtual DbSet<TGarantiaSubasta> TGarantiasSubastas { get; set; }
     public virtual DbSet<TCotizacionDocumento> TCotizacionDocumentos { get; set; }
     public virtual DbSet<TDocumentoItemProveedor> TDocumentoItemProveedores { get; set; }
+    public virtual DbSet<TProveedoresRepresentante> TProveedoresRepresentantes { get; set; }
+    public virtual DbSet<TPersona> TPersonas { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -834,6 +836,48 @@ public partial class PortalSubastasContext : DbContext
             entity.HasOne(d => d.IdCotizacionNavigation).WithMany().HasForeignKey(d => d.IdCotizacion).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(d => d.IdCotizacionDetalleNavigation).WithMany().HasForeignKey(d => d.IdCotizacionDetalle).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(d => d.IdRenglonNavigation).WithMany().HasForeignKey(d => d.IdRenglon).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<TProveedoresRepresentante>(entity =>
+        {
+            entity.HasKey(e => new { e.IdProveedor, e.IdPersona }).HasName("t_proveedores_representantes_pkey");
+
+            entity.ToTable("t_proveedores_representantes", "negocio");
+
+            entity.Property(e => e.IdProveedor).HasColumnName("id_proveedor");
+            entity.Property(e => e.IdPersona).HasColumnName("id_persona");
+
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
+
+            entity.HasOne(d => d.IdPersonaNavigation)
+                .WithMany(p => p.TProveedoresRepresentantes)
+                .HasForeignKey(d => d.IdPersona)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("t_proveedores_representantes_id_persona_fkey");
+        });
+
+        modelBuilder.Entity<TPersona>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("t_personas_pkey");
+
+            entity.ToTable("t_personas", "iam");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Nombre).HasMaxLength(255).HasColumnName("nombre");
+            entity.Property(e => e.Apellido).HasMaxLength(255).HasColumnName("apellido");
+            entity.Property(e => e.EmailContacto).HasMaxLength(255).HasColumnName("email_contacto");
+
+            entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
+            entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");
+            entity.Property(e => e.UsrMod).HasMaxLength(100).HasColumnName("usr_mod");
+            entity.Property(e => e.FecMod).HasColumnType("timestamp without time zone").HasColumnName("fec_mod");
+            entity.Property(e => e.UsrBaja).HasMaxLength(100).HasColumnName("usr_baja");
+            entity.Property(e => e.FecBaja).HasColumnType("timestamp without time zone").HasColumnName("fec_baja");
         });
 
         OnModelCreatingPartial(modelBuilder);
