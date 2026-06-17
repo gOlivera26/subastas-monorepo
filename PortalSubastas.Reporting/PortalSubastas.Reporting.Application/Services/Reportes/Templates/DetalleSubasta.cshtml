@@ -1,0 +1,174 @@
+@model PortalSubastas.Reporting.Domain.Models.DetalleSubastaReport
+@{
+    var culture = new System.Globalization.CultureInfo("es-AR");
+    string Fecha(DateTime? value) => value.HasValue ? value.Value.ToString("dd/MM/yyyy HH:mm", culture) : "-";
+    string Money(decimal value) => value.ToString("C", culture);
+    string MoneyNullable(decimal? value) => value.HasValue ? value.Value.ToString("C", culture) : "-";
+    string Number(decimal value) => value.ToString("N2", culture);
+    var fechaEmision = Model.Cabecera.FechaEmision.ToOffset(TimeSpan.FromHours(-3)).ToString("dd/MM/yyyy HH:mm", culture);
+}
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Detalle de subasta @Model.Cabecera.NumeroCotizacion</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            color: #111827;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            margin: 0;
+        }
+        .page { padding: 24px 28px; }
+        header {
+            border-bottom: 2px solid #111827;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+        }
+        .brand {
+            color: #6b7280;
+            font-size: 10px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        h1 { font-size: 20px; margin: 6px 0 4px; }
+        h2 {
+            border-bottom: 1px solid #d1d5db;
+            font-size: 14px;
+            margin: 20px 0 8px;
+            padding-bottom: 4px;
+        }
+        .subtitle { color: #4b5563; }
+        .grid {
+            display: grid;
+            gap: 8px;
+            grid-template-columns: repeat(3, 1fr);
+            margin: 14px 0;
+        }
+        .card {
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            padding: 8px;
+        }
+        .label {
+            color: #6b7280;
+            display: block;
+            font-size: 9px;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+        }
+        .value { font-weight: 700; }
+        table {
+            border-collapse: collapse;
+            margin-top: 8px;
+            page-break-inside: auto;
+            width: 100%;
+        }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        th, td {
+            border: 1px solid #d1d5db;
+            padding: 6px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background: #f3f4f6;
+            font-size: 9px;
+            text-transform: uppercase;
+        }
+        .number { text-align: right; white-space: nowrap; }
+        .muted { color: #6b7280; }
+        .empty {
+            border: 1px dashed #d1d5db;
+            color: #6b7280;
+            padding: 8px;
+        }
+    </style>
+</head>
+<body>
+<main class="page">
+    <header>
+        <div class="brand">Portal Subastas · Reporteria</div>
+        <h1>Detalle de subasta</h1>
+        <div class="subtitle">@Model.Cabecera.Titulo</div>
+    </header>
+
+    <section class="grid">
+        <div class="card"><span class="label">Cotizacion</span><span class="value">@Model.Cabecera.NumeroCotizacion</span></div>
+        <div class="card"><span class="label">Estado</span><span class="value">@Model.Cabecera.Estado</span></div>
+        <div class="card"><span class="label">Tipo</span><span class="value">@Model.Cabecera.TipoContratacion</span></div>
+        <div class="card"><span class="label">Criterio</span><span class="value">@Model.Cabecera.CriterioAdjudicacion</span></div>
+        <div class="card"><span class="label">Unidad administrativa</span><span class="value">@Model.Cabecera.UnidadAdministrativa</span></div>
+        <div class="card"><span class="label">Expediente</span><span class="value">@(Model.Cabecera.NumeroExpediente ?? "-")</span></div>
+        <div class="card"><span class="label">Inicio</span><span class="value">@Fecha(Model.Cabecera.FechaInicioSubasta)</span></div>
+        <div class="card"><span class="label">Fin</span><span class="value">@Fecha(Model.Cabecera.FechaFinalizacionSubasta)</span></div>
+        <div class="card"><span class="label">Emitido</span><span class="value">@fechaEmision</span></div>
+    </section>
+
+    <h2>Items de la subasta</h2>
+    @if (!Model.Items.Any())
+    {
+        <div class="empty">No hay items cargados para esta subasta.</div>
+    }
+    else
+    {
+        <table>
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Item</th>
+                <th>Moneda</th>
+                <th class="number">Cantidad</th>
+                <th class="number">Importe base</th>
+                <th class="number">Total base</th>
+                <th class="number">Importe minimo</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var item in Model.Items)
+            {
+                <tr>
+                    <td>@item.Numero</td>
+                    <td>@item.Descripcion</td>
+                    <td>@(item.Moneda ?? "-")</td>
+                    <td class="number">@Number(item.Cantidad)</td>
+                    <td class="number">@Money(item.ImporteBase)</td>
+                    <td class="number">@Money(item.TotalBase)</td>
+                    <td class="number">@MoneyNullable(item.ImporteMinimo)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+
+    <h2>Proveedores participantes / invitados</h2>
+    @if (!Model.Proveedores.Any())
+    {
+        <div class="empty">No hay proveedores asociados a esta subasta.</div>
+    }
+    else
+    {
+        <table>
+            <thead>
+            <tr>
+                <th>Proveedor</th>
+                <th>CUIT</th>
+                <th>Estado</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var proveedor in Model.Proveedores)
+            {
+                <tr>
+                    <td>@proveedor.Proveedor</td>
+                    <td>@(string.IsNullOrWhiteSpace(proveedor.Cuit) ? "-" : proveedor.Cuit)</td>
+                    <td>@proveedor.EstadoParticipacion</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</main>
+</body>
+</html>

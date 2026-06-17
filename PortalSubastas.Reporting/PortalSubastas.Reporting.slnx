@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="PortalSubastas.Reporting.API/PortalSubastas.Reporting.API.csproj" />
+  <Project Path="PortalSubastas.Reporting.Application/PortalSubastas.Reporting.Application.csproj" />
+  <Project Path="PortalSubastas.Reporting.Domain/PortalSubastas.Reporting.Domain.csproj" />
+</Solution>

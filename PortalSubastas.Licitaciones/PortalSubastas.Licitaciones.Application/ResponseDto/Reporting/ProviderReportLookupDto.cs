@@ -1,6 +1,6 @@
-namespace PortalSubastas.Providers.Application.ResponseDto.Proveedor;
+namespace PortalSubastas.Licitaciones.Application.ResponseDto.Reporting;
 
-public class ProviderResponseDto
+public sealed class ProviderReportLookupDto
 {
     public int Id { get; set; }
     public string RazonSocial { get; set; } = string.Empty;

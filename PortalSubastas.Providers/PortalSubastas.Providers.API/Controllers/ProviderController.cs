@@ -40,6 +40,13 @@ public class ProviderController : BaseController
         return Return(result);
     }
 
+    [HttpGet("by-ids")]
+    public async Task<IActionResult> GetByIds([FromQuery] List<int> ids)
+    {
+        var result = await _providerService.GetByIdsAsync(ids);
+        return Return(result);
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateProvider([FromBody] CreateProviderDto dto)
     {

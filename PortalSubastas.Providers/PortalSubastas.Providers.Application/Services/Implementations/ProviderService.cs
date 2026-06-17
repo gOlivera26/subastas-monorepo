@@ -36,6 +36,27 @@ public class ProviderService : BaseService, IProviderService
         return Ok(_mapper.Map<ProviderResponseDto>(proveedor));
     }
 
+    public async Task<OperationResponse<List<ProviderResponseDto>>> GetByIdsAsync(List<int> ids)
+    {
+        var normalizedIds = ids
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
+        if (normalizedIds.Count == 0)
+            return BadRequest<List<ProviderResponseDto>>("Debe informar al menos un proveedor valido.");
+
+        var proveedores = await _context.TProveedores
+            .Where(p => normalizedIds.Contains(p.Id))
+            .OrderBy(p => p.RazonSocial)
+            .ToListAsync();
+
+        if (proveedores.Count == 0)
+            return NotFound<List<ProviderResponseDto>>();
+
+        return Ok(_mapper.Map<List<ProviderResponseDto>>(proveedores));
+    }
+
     public async Task<OperationResponse<ProviderListResponseDto>> GetProvidersAsync(int page, int pageSize, string? searchTerm, string? sortBy = null, string? sortDirection = null)
     {
         var query = _context.TProveedores.AsQueryable();
