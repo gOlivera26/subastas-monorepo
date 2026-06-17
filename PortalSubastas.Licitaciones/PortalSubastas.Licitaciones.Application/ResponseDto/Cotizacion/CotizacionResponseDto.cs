@@ -87,4 +87,5 @@ public class SubastaDashboardDto
     public DateTime? FechaLimiteImpugnar { get; set; }
     public DateTime? FechaAperturaSobreUno { get; set; }
     public DateTime? FechaAperturaSobreDos { get; set; }
+    public int CantOfertas { get; set; }
 }

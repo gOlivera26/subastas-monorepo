@@ -1,12 +1,10 @@
-﻿using PortalSubastas.Licitaciones.Application.RequestDto.Cotizacion.Consultas;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using PortalSubastas.Contracts.Events;
+using PortalSubastas.Licitaciones.Application.RequestDto.Cotizacion.Consultas;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.Services.Interfaces;
 using PortalSubastas.Licitaciones.Domain.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PortalSubastas.Licitaciones.Application.Services.Implementations;
 
@@ -15,6 +13,8 @@ public class ConsultaService : BaseService, IConsultaService
     private new readonly PortalSubastasContext _context;
     private readonly ISubastaNotificationService _notificationService;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<ConsultaService> _logger;
+    private readonly IProveedorRepresentanteService _proveedorRepresentanteService;
 
     public ConsultaService(
         PortalSubastasContext context,
@@ -22,12 +22,16 @@ public class ConsultaService : BaseService, IConsultaService
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
         ISubastaNotificationService notificationService,
-        IPublishEndpoint publishEndpoint)
+        IPublishEndpoint publishEndpoint,
+        ILogger<ConsultaService> logger,
+        IProveedorRepresentanteService proveedorRepresentanteService)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _notificationService = notificationService;
         _publishEndpoint = publishEndpoint;
+        _proveedorRepresentanteService = proveedorRepresentanteService;
+        _logger = logger;
     }
 
     public async Task<OperationResponse<List<ConsultaResponseDto>>> GetConsultasAsync(int idCotizacion)
@@ -44,6 +48,7 @@ public class ConsultaService : BaseService, IConsultaService
     {
         var cotizacion = await _context.TCotizaciones
             .Include(c => c.Especificacion)
+            .Include(c => c.IdUnidadAdmNavigation)
             .FirstOrDefaultAsync(c => c.IdCotizacion == idCotizacion);
 
         if (cotizacion == null) return NotFound<ConsultaResponseDto>();
@@ -74,8 +79,30 @@ public class ConsultaService : BaseService, IConsultaService
         // 3. Notificar por SignalR a todos en la sala "chat_{id}"
         await _notificationService.NotificarNuevaPreguntaAsync(idCotizacion, resultDto);
 
-        // TODO: FASE 6 - Integrar envío de email al Organismo alertando la nueva pregunta.
-        // await PublishSystemLogAsync(_publishEndpoint, "NUEVA_PREGUNTA_EMAIL", ...);
+        // 4. Publicar evento PreguntaRealizadaEvent para email al organismo
+        try
+        {
+            var orgEmail = cotizacion.IdUnidadAdmNavigation?.Mail;
+            var orgNombre = cotizacion.IdUnidadAdmNavigation?.NombreUnidadAdm ?? "Organismo";
+
+            if (!string.IsNullOrWhiteSpace(orgEmail))
+            {
+                await _publishEndpoint.Publish(new PreguntaRealizadaEvent(
+                    IdCotizacion: idCotizacion,
+                    NroCotizacion: cotizacion.NroCotizacion ?? "",
+                    Titulo: cotizacion.Observacion ?? "Subasta " + (cotizacion.NroCotizacion ?? ""),
+                    ContenidoPregunta: dto.Contenido,
+                    EmailOrganismo: orgEmail,
+                    NombreOrganismo: orgNombre,
+                    UsuarioProveedor: GetCurrentUsername(),
+                    OccuredOn: DateTime.UtcNow
+                ));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ No se pudo publicar PreguntaRealizadaEvent para cotización {IdCotizacion}. El flujo continúa.", idCotizacion);
+        }
 
         return Ok(resultDto);
     }
@@ -85,7 +112,9 @@ public class ConsultaService : BaseService, IConsultaService
         if (!IsSuperAdmin())
             return Unauthorized<ConsultaResponseDto>("Solo los administradores pueden responder consultas.");
 
-        var mensaje = await _context.TMensajes.FirstOrDefaultAsync(m => m.IdMensaje == idMensaje && m.IdCotizacion == idCotizacion);
+        var mensaje = await _context.TMensajes
+            .Include(m => m.IdCotizacionNavigation)
+            .FirstOrDefaultAsync(m => m.IdMensaje == idMensaje && m.IdCotizacion == idCotizacion);
         if (mensaje == null) return NotFound<ConsultaResponseDto>();
 
         // Llenar campos de respuesta (Nuevos campos BD)
@@ -97,6 +126,30 @@ public class ConsultaService : BaseService, IConsultaService
 
         await PublishSystemLogAsync(_publishEndpoint, "PREGUNTA_RESPONDIDA", "LICITACIONES", new { IdCotizacion = idCotizacion, IdMensaje = idMensaje, RespondidoPor = GetCurrentUsername() });
 
+        // 4. Publicar evento PreguntaRespondidaEvent para email a los representantes del proveedor
+        try
+        {
+            var representantes = await GetRepresentantesAsync(mensaje.IdProveedor ?? 0);
+
+            foreach (var (email, nombre) in representantes)
+            {
+                await _publishEndpoint.Publish(new PreguntaRespondidaEvent(
+                    IdCotizacion: idCotizacion,
+                    NroCotizacion: mensaje.IdCotizacionNavigation?.NroCotizacion ?? "",
+                    Titulo: mensaje.IdCotizacionNavigation?.Observacion ?? "Subasta",
+                    ContenidoPregunta: mensaje.Contenido,
+                    ContenidoRespuesta: dto.Respuesta,
+                    EmailProveedor: email,
+                    NombreProveedor: nombre,
+                    OccuredOn: DateTime.UtcNow
+                ));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "⚠️ No se pudo publicar PreguntaRespondidaEvent para cotización {IdCotizacion}. El flujo continúa.", idCotizacion);
+        }
+
         var resultDto = _mapper.Map<ConsultaResponseDto>(mensaje);
 
         // Notificar respuesta en vivo
@@ -104,4 +157,7 @@ public class ConsultaService : BaseService, IConsultaService
 
         return Ok(resultDto);
     }
+
+    private async Task<List<(string Email, string NombrePersona)>> GetRepresentantesAsync(int idProveedor)
+        => await _proveedorRepresentanteService.GetRepresentantesAsync(idProveedor);
 }
