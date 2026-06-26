@@ -74,6 +74,10 @@ public class CotizacionService : BaseService, ICotizacionService
         dto.Tipo = entity.IdTipoContratacion.ToDisplayName();
         dto.Estado = GetEstadoNombre(entity.IdEstado);
         dto.Modalidad = entity.Especificacion?.Redeterminacion switch { "1" => "PÃºblica", "0" => "Privada", "2" => "Cerrada", _ => "No definida" };
+        if (dto.Especificacion != null)
+        {
+            dto.Especificacion.GestionDocumentacion = RequiereGestionDocumentacion(entity);
+        }
 
         try
         {
@@ -844,7 +848,9 @@ public class CotizacionService : BaseService, ICotizacionService
         PrepareAuditableEntity(entity, isNew: false);
         
         if (entity.Especificacion != null)
+        {
             PrepareAuditableEntity(entity.Especificacion, isNew: false);
+        }
 
         await _context.SaveChangesAsync();
 
@@ -1074,7 +1080,7 @@ public class CotizacionService : BaseService, ICotizacionService
                      && c.Especificacion.FechaFinalizacionSubasta >= now);
 
         var data = await query.ToListAsync();
-        return Ok(MapToDashboard(data));
+        return Ok(await MapToDashboardAsync(data));
     }
 
     public async Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasProximasAsync(int? idVigencia)
@@ -1087,7 +1093,7 @@ public class CotizacionService : BaseService, ICotizacionService
             .Take(6);
 
         var data = await query.ToListAsync();
-        return Ok(MapToDashboard(data));
+        return Ok(await MapToDashboardAsync(data));
     }
 
     public async Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasDelMesAsync(int? idVigencia)
@@ -1102,7 +1108,7 @@ public class CotizacionService : BaseService, ICotizacionService
             .OrderBy(c => c.Especificacion.FechaInicioSubasta);
 
         var data = await query.ToListAsync();
-        return Ok(MapToDashboard(data));
+        return Ok(await MapToDashboardAsync(data));
     }
 
     public async Task<OperationResponse<List<SubastaDashboardDto>>> BuscarAsync(
@@ -1162,7 +1168,7 @@ public class CotizacionService : BaseService, ICotizacionService
         }
 
         var data = await query.OrderByDescending(c => c.IdCotizacion).Take(100).ToListAsync();
-        return Ok(MapToDashboard(data));
+        return Ok(await MapToDashboardAsync(data));
     }
 
     public async Task<OperationResponse<CotizacionResponseDto>> ProrrogarAsync(int id, int minutos)
@@ -1867,8 +1873,18 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
         _ => "Participante"
     };
 
-    private List<SubastaDashboardDto> MapToDashboard(List<TCotizacion> data)
+    private async Task<List<SubastaDashboardDto>> MapToDashboardAsync(List<TCotizacion> data)
     {
+        var cotizacionIds = data.Select(c => c.IdCotizacion).ToList();
+        var cotizacionesConDocumentos = cotizacionIds.Count == 0
+            ? new HashSet<int>()
+            : (await _context.TCotizacionDocumentos
+                .Where(d => cotizacionIds.Contains(d.IdCotizacion) && d.FecBaja == null)
+                .Select(d => d.IdCotizacion)
+                .Distinct()
+                .ToListAsync())
+                .ToHashSet();
+
         return data.Select(c => new SubastaDashboardDto
         {
             IdCotizacion = c.IdCotizacion,
@@ -1890,6 +1906,7 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
             VerInformeFinal = c.IdEstado == 40, // Finalizada
 
             MostrarBotonMejora = c.Especificacion?.MostrarBotonMejora ?? false,
+            GestionDocumentacion = RequiereGestionDocumentacion(c, cotizacionesConDocumentos),
             TipoSobre = c.Especificacion?.TipoSobre,
             FechaLimiteImpugnar = c.Especificacion?.FechaLimiteImpugnar,
             FechaAperturaSobreUno = c.Especificacion?.FechaAperturaSobreUno,
@@ -1898,6 +1915,30 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
         }).ToList();
     }
 
+    private async Task<bool> RequiereGestionDocumentacionAsync(int idCotizacion, int idTipoContratacion)
+    {
+        if (idTipoContratacion == 8)
+            return true;
+
+        var configurada = await _context.TCotizacionEspecificaciones
+            .Where(e => e.IdCotizacion == idCotizacion && e.FecBaja == null)
+            .Select(e => e.GestionDocumentacion)
+            .FirstOrDefaultAsync();
+
+        if (configurada)
+            return true;
+
+        return await _context.TCotizacionDocumentos
+            .AnyAsync(d => d.IdCotizacion == idCotizacion && d.FecBaja == null);
+    }
+
+    private static bool RequiereGestionDocumentacion(TCotizacion cotizacion)
+        => cotizacion.IdTipoContratacion == 8 || cotizacion.Especificacion?.GestionDocumentacion == true;
+
+    private static bool RequiereGestionDocumentacion(TCotizacion cotizacion, HashSet<int> cotizacionesConDocumentos)
+        => RequiereGestionDocumentacion(cotizacion) || cotizacionesConDocumentos.Contains(cotizacion.IdCotizacion);
+
     private async Task<List<(string Email, string NombrePersona)>> GetRepresentantesAsync(int idProveedor)
         => await _proveedorRepresentanteService.GetRepresentantesAsync(idProveedor);
 }
+

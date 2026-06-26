@@ -32,6 +32,7 @@ public class CotizacionEspecificacionResponseDto
     public bool PermiteProrroga { get; set; }
     public int? ProrrogaMinutos { get; set; }
     public string Redeterminacion { get; set; }
+    public bool GestionDocumentacion { get; set; }
 }
 
 public class CotizacionDetalleResponseDto
@@ -83,6 +84,7 @@ public class SubastaDashboardDto
     public DateTime? FechaFinSubasta { get; set; }
     public bool VerInformeFinal { get; set; }
     public bool MostrarBotonMejora { get; set; }
+    public bool GestionDocumentacion { get; set; }
     public string TipoSobre { get; set; }
     public DateTime? FechaLimiteImpugnar { get; set; }
     public DateTime? FechaAperturaSobreUno { get; set; }

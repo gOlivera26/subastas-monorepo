@@ -24,6 +24,7 @@ public class CotizacionEspecificacionRequestDto
     public bool PermiteProrroga { get; set; }
     public int? ProrrogaMinutos { get; set; }
     public string? Redeterminacion { get; set; }
+    public bool GestionDocumentacion { get; set; }
 }
 
 public class CotizacionDetalleRequestDto

@@ -616,6 +616,7 @@ public partial class PortalSubastasContext : DbContext
             entity.Property(e => e.FechaAperturaSobreUno).HasColumnType("timestamp without time zone").HasColumnName("fecha_apertura_sobre_uno");
             entity.Property(e => e.FechaAperturaSobreDos).HasColumnType("timestamp without time zone").HasColumnName("fecha_apertura_sobre_dos");
             entity.Property(e => e.MostrarBotonMejora).HasColumnName("mostrar_boton_mejora");
+            entity.Property(e => e.GestionDocumentacion).HasColumnName("gestion_documentacion");
 
             entity.Property(e => e.UsrIng).HasMaxLength(100).HasDefaultValueSql("'SISTEMA'::character varying").HasColumnName("usr_ing");
             entity.Property(e => e.FecIng).HasDefaultValueSql("CURRENT_TIMESTAMP").HasColumnType("timestamp without time zone").HasColumnName("fec_ing");

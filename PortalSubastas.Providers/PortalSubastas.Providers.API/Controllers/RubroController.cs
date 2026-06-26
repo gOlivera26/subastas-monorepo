@@ -28,6 +28,17 @@ public class RubroController : BaseController
         return Return(result);
     }
 
+    [HttpPost("bulk-upload")]
+    public async Task<IActionResult> BulkUploadRubros(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest("Debe adjuntar un archivo CSV.");
+
+        await using var stream = file.OpenReadStream();
+        var result = await _rubroService.BulkUploadRubrosAsync(stream);
+        return Return(result);
+    }
+
     [HttpPut]
     public async Task<IActionResult> UpdateRubro([FromBody] UpdateRubroDto dto)
     {
