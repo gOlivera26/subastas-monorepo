@@ -165,6 +165,40 @@ public class AuthService : BaseService, IAuthService
         if (docExiste)
             return BadRequest<LoginResponseDto>("El documento ya se encuentra registrado.");
 
+        var rol = await _identityContext.TRoles.FirstOrDefaultAsync(r => r.Id == request.IdRol);
+        if (rol == null)
+        {
+            rol = await ResolveRegistrationRoleAsync(request);
+            if (rol == null)
+                return BadRequest<LoginResponseDto>("El rol seleccionado no existe o no está activo.");
+        }
+
+        var idRolRegistro = rol.Id;
+
+        var tipoPersonaExiste = await _identityContext.TTiposPersonas.AnyAsync(t => t.Id == request.IdTipoPersona);
+        if (!tipoPersonaExiste)
+            return BadRequest<LoginResponseDto>("El tipo de persona seleccionado no existe o no está activo.");
+
+        var tipoDocumentoExiste = await _identityContext.TTiposDocumentos.AnyAsync(t => t.Id == request.IdTipoDocumento);
+        if (!tipoDocumentoExiste)
+            return BadRequest<LoginResponseDto>("El tipo de documento seleccionado no existe o no está activo.");
+
+        if (request.IdOrganizacion.HasValue)
+        {
+            var organizacionExiste = await _identityContext.TOrganizaciones
+                .AnyAsync(o => o.IdOrganizacion == request.IdOrganizacion.Value && o.Activo == true);
+            if (!organizacionExiste)
+                return BadRequest<LoginResponseDto>("La organización seleccionada no existe o no está activa.");
+        }
+
+        if (request.IdProveedor.HasValue)
+        {
+            var proveedorExiste = await _identityContext.TProveedores
+                .AnyAsync(p => p.Id == request.IdProveedor.Value);
+            if (!proveedorExiste)
+                return BadRequest<LoginResponseDto>("El proveedor seleccionado no existe o no está activo.");
+        }
+
         string? codigoConfirmacion = null;
 
         var transactionResult = await InsertWithTransactionAsync(async () =>
@@ -188,7 +222,7 @@ public class AuthService : BaseService, IAuthService
             var usuario = new TUsuario
             {
                 IdPersona = persona.Id,
-                IdRol = request.IdRol,
+                IdRol = idRolRegistro,
                 IdEstado = 8, // PENDIENTE_CONFIRMACION
                 EmailLogin = request.Email,
                 PasswordHash = BC.HashPassword(request.Password),
@@ -250,9 +284,37 @@ public class AuthService : BaseService, IAuthService
         {
             NombreUsuario = $"{request.Nombre} {request.Apellido}",
             Email = request.Email,
-            Token = string.Empty
+            Token = string.Empty,
+            CodigoConfirmacionDesarrollo = ShouldExposeDevEmailCode() ? codigoConfirmacion : null
         });
     }
+
+    private async Task<TRole?> ResolveRegistrationRoleAsync(RegisterRequestDto request)
+    {
+        var roles = await _identityContext.TRoles.AsNoTracking().ToListAsync();
+
+        if (request.IdOrganizacion.HasValue)
+        {
+            return roles.FirstOrDefault(r =>
+                RoleNameContains(r.Nombre, "GESTOR") ||
+                RoleNameContains(r.Nombre, "LICITACION") ||
+                RoleNameContains(r.Nombre, "LICITACIÓN") ||
+                RoleNameContains(r.Nombre, "INVERSA"));
+        }
+
+        if (request.IdProveedor.HasValue)
+        {
+            return roles.FirstOrDefault(r =>
+                RoleNameContains(r.Nombre, "PROVEEDOR") ||
+                RoleNameContains(r.Nombre, "DIRECTA"));
+        }
+
+        return null;
+    }
+
+    private static bool RoleNameContains(string? roleName, string value)
+        => !string.IsNullOrWhiteSpace(roleName) &&
+           roleName.Trim().ToUpperInvariant().Contains(value, StringComparison.OrdinalIgnoreCase);
 
     public async Task<OperationResponse<ProfileResponseDto>> GetProfileAsync()
     {
@@ -442,6 +504,16 @@ public class AuthService : BaseService, IAuthService
                 <small>Trasus Argentina — Portal de Subastas</small>
             ");
 
+        if (ShouldExposeDevEmailCode())
+        {
+            return OperationResponse<bool>.CreateBuilder()
+                .WithSuccess(true)
+                .WithMessage($"Codigo de confirmacion desarrollo local: {nuevoCodigo}")
+                .WithData(true)
+                .WithCode(200)
+                .Build();
+        }
+
         return Ok(true);
     }
 
@@ -509,6 +581,16 @@ public class AuthService : BaseService, IAuthService
             new { Mensaje = $"El usuario {usuario.EmailLogin} restableció su contraseña." });
 
         return Ok(true);
+    }
+
+    private bool ShouldExposeDevEmailCode()
+    {
+        var environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? _configuration["DOTNET_ENVIRONMENT"];
+        var isDevelopment = string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase);
+        var hasEmailConfig = !string.IsNullOrWhiteSpace(_configuration["Resend:From"])
+                             && !string.IsNullOrWhiteSpace(_configuration["Resend:ApiKey"]);
+
+        return isDevelopment && !hasEmailConfig;
     }
 
     private static string GenerarCodigoConfirmacion()

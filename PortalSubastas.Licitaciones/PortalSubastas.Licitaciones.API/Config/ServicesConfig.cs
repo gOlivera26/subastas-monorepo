@@ -188,6 +188,7 @@ public static class ServicesConfig
         services.AddScoped<IDocumentoItemService, DocumentoItemService>();
         services.AddScoped<IProveedorRepresentanteService, ProveedorRepresentanteService>();
         services.AddScoped<IProveedorService, ProveedorService>();
+        services.AddScoped<ITableroService, TableroService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)

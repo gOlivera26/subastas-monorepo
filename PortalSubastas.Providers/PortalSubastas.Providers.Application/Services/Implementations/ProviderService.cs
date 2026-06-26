@@ -57,6 +57,27 @@ public class ProviderService : BaseService, IProviderService
         return Ok(_mapper.Map<List<ProviderResponseDto>>(proveedores));
     }
 
+    public async Task<OperationResponse<List<ProviderResponseDto>>> GetByRubroAsync(int rubroId, bool includeChildren = true)
+    {
+        var rubro = await _context.TRubros.FirstOrDefaultAsync(r => r.Id == rubroId);
+        if (rubro == null)
+            return NotFound<List<ProviderResponseDto>>();
+
+        var rubroIds = includeChildren
+            ? await GetRubroAndChildrenIdsAsync(rubroId)
+            : new List<int> { rubroId };
+
+        var proveedores = await _context.TProveedores
+            .Where(p => p.TProveedoresRubros.Any(pr => rubroIds.Contains(pr.IdRubro) && pr.FecBaja == null))
+            .OrderBy(p => p.RazonSocial)
+            .ToListAsync();
+
+        if (proveedores.Count == 0)
+            return NotFound<List<ProviderResponseDto>>();
+
+        return Ok(_mapper.Map<List<ProviderResponseDto>>(proveedores));
+    }
+
     public async Task<OperationResponse<ProviderListResponseDto>> GetProvidersAsync(int page, int pageSize, string? searchTerm, string? sortBy = null, string? sortDirection = null)
     {
         var query = _context.TProveedores.AsQueryable();
@@ -209,5 +230,32 @@ public class ProviderService : BaseService, IProviderService
             new { ProveedorId = providerId, Url = url });
 
         return Ok(url);
+    }
+
+    private async Task<List<int>> GetRubroAndChildrenIdsAsync(int rubroId)
+    {
+        var result = new List<int> { rubroId };
+        var pending = new Queue<int>();
+        pending.Enqueue(rubroId);
+
+        while (pending.Count > 0)
+        {
+            var current = pending.Dequeue();
+            var children = await _context.TRubros
+                .Where(r => r.IdRubroPadre == current && r.FecBaja == null)
+                .Select(r => r.Id)
+                .ToListAsync();
+
+            foreach (var child in children)
+            {
+                if (result.Contains(child))
+                    continue;
+
+                result.Add(child);
+                pending.Enqueue(child);
+            }
+        }
+
+        return result;
     }
 }

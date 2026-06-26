@@ -47,6 +47,13 @@ public class ProviderController : BaseController
         return Return(result);
     }
 
+    [HttpGet("by-rubro/{rubroId:int}")]
+    public async Task<IActionResult> GetByRubro(int rubroId, [FromQuery] bool includeChildren = true)
+    {
+        var result = await _providerService.GetByRubroAsync(rubroId, includeChildren);
+        return Return(result);
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateProvider([FromBody] CreateProviderDto dto)
     {

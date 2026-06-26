@@ -53,12 +53,18 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
         if (ahora > cotizacion.Especificacion?.FechaFinalizacionSubasta)
             return BadRequest<List<OfertaItemResponseDto>>("La subasta ya ha finalizado.");
 
-        bool tieneGarantia = await _context.TGarantiasSubastas
-            .AnyAsync(g => g.IdCotizacion == idCotizacion && g.IdProveedor == idProveedor.Value && g.FecBaja == null);
+        var requiereGarantia = cotizacion.IdTipoContratacion == 8
+            || cotizacion.Especificacion?.GestionDocumentacion == true;
 
-        if (!tieneGarantia)
+        if (requiereGarantia)
         {
-            return BadRequest<List<OfertaItemResponseDto>>("Para poder ofertar debe subir la garantía y/o pagaré correspondiente.");
+            bool tieneGarantia = await _context.TGarantiasSubastas
+                .AnyAsync(g => g.IdCotizacion == idCotizacion && g.IdProveedor == idProveedor.Value && g.FecBaja == null);
+
+            if (!tieneGarantia)
+            {
+                return BadRequest<List<OfertaItemResponseDto>>("Para poder ofertar debe subir la garantía y/o pagaré correspondiente.");
+            }
         }
 
         var detallesIds = cotizacion.Detalles.Select(d => d.IdReservaDetalle).ToList();
