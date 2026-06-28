@@ -35,6 +35,14 @@ public class GanadorController : BaseController
         return Return(result);
     }
 
+    [HttpPost("{idCotizacion:int}/generar")]
+    [ProducesResponseType(typeof(OperationResponse<List<GanadorResponseDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> Generate(int idCotizacion)
+    {
+        var result = await _ganadorService.GenerateAsync(idCotizacion);
+        return Return(result);
+    }
+
     [HttpDelete("{id:int}")]
     [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Delete(int id)

@@ -13,7 +13,7 @@ public class SubastaNotificationService : ISubastaNotificationService
         _hubContext = hubContext;
     }
 
-    public async Task NotificarNuevaOfertaAsync(int idCotizacion, int idOfertaSubasta, int? idCotizacionDetalle, int? idRenglon, decimal monto, int idProveedor, DateTime fechaOferta)
+    public async Task NotificarNuevaOfertaAsync(int idCotizacion, int idOfertaSubasta, int? idCotizacionDetalle, int? idRenglon, decimal monto, int idProveedor, DateTime fechaOferta, string? proveedor = null, string? representante = null)
     {
         var payloadOferta = new
         {
@@ -23,7 +23,11 @@ public class SubastaNotificationService : ISubastaNotificationService
             monto = (double)monto,
             idProveedor = idProveedor,
             fecha = fechaOferta.ToString("yyyy-MM-ddTHH:mm:ss"),
-            usuario = $"Proveedor #{idProveedor}"
+            proveedor = proveedor ?? $"Proveedor #{idProveedor}",
+            representante = representante,
+            usuario = string.IsNullOrWhiteSpace(representante)
+                ? (proveedor ?? $"Proveedor #{idProveedor}")
+                : representante
         };
 
         await _hubContext.Clients.Group($"subasta_{idCotizacion}").SendAsync("OfertaRecibida", payloadOferta);

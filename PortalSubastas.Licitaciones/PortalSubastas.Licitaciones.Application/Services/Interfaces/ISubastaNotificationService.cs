@@ -2,7 +2,7 @@
 
 public interface ISubastaNotificationService
 {
-    Task NotificarNuevaOfertaAsync(int idCotizacion, int idOfertaSubasta, int? idCotizacionDetalle, int? idRenglon, decimal monto, int idProveedor, DateTime fechaOferta);
+    Task NotificarNuevaOfertaAsync(int idCotizacion, int idOfertaSubasta, int? idCotizacionDetalle, int? idRenglon, decimal monto, int idProveedor, DateTime fechaOferta, string? proveedor = null, string? representante = null);
     Task NotificarProrrogaAsync(int idCotizacion, DateTime nuevaFechaFin);
     Task NotificarNuevaPreguntaAsync(int idCotizacion, object pregunta);
     Task NotificarNuevaRespuestaAsync(int idCotizacion, object respuesta);

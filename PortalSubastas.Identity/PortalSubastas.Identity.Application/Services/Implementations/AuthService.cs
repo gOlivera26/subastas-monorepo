@@ -76,11 +76,7 @@ public class AuthService : BaseService, IAuthService
             .OrderBy(m => modulosPermitidos.Concat(modulosDesdePaginas).ToList().IndexOf(m))
             .ToList();
 
-        var entidades = new List<EntidadDto>();
-        foreach (var j in usuario.TJurisdiccionesUsuarios.Where(x => x.FecBaja == null))
-            entidades.Add(new EntidadDto { Id = j.IdOrganizacion, Tipo = "GESTOR", Nombre = j.IdOrganizacionNavigation.Nombre });
-        foreach (var p in usuario.IdPersonaNavigation.TProveedoresRepresentantes.Where(x => x.FecBaja == null))
-            entidades.Add(new EntidadDto { Id = p.IdProveedor, Tipo = "PROVEEDOR", Nombre = p.IdProveedorNavigation.RazonSocial });
+        var entidades = ObtenerEntidadesOperables(usuario);
 
         var token = GenerarJwtToken(usuario); // Llama por defecto al primer contexto
 
@@ -127,6 +123,13 @@ public class AuthService : BaseService, IAuthService
 
         if (usuario == null) return NotFound<LoginResponseDto>();
 
+        request.TipoEntidad = NormalizarTipoContexto(request.TipoEntidad);
+        if (!EsTipoContextoValido(request.TipoEntidad))
+            return BadRequest<LoginResponseDto>("El tipo de contexto solicitado no es válido.");
+
+        if (!RolPuedeOperarContexto(usuario.IdRolNavigation.Nombre, request.TipoEntidad))
+            return BadRequest<LoginResponseDto>("El rol del usuario no permite operar en este contexto.");
+
         // Validar que realmente pertenece a esa entidad
         if (request.TipoEntidad == "GESTOR")
         {
@@ -157,6 +160,10 @@ public class AuthService : BaseService, IAuthService
 
     public async Task<OperationResponse<LoginResponseDto>> RegisterAsync(RegisterRequestDto request)
     {
+        var contextoRegistro = ObtenerTipoContextoRegistro(request);
+        if (contextoRegistro == null)
+            return BadRequest<LoginResponseDto>("Debe seleccionar una organización o un proveedor, pero no ambos.");
+
         var emailExiste = await _identityContext.TUsuarios.AnyAsync(u => u.EmailLogin == request.Email);
         if (emailExiste)
             return BadRequest<LoginResponseDto>("El correo electrónico ya se encuentra registrado.");
@@ -175,6 +182,9 @@ public class AuthService : BaseService, IAuthService
 
         var idRolRegistro = rol.Id;
 
+        if (!RolPuedeOperarContexto(rol.Nombre, contextoRegistro))
+            return BadRequest<LoginResponseDto>("El rol seleccionado no corresponde al tipo de registro.");
+
         var tipoPersonaExiste = await _identityContext.TTiposPersonas.AnyAsync(t => t.Id == request.IdTipoPersona);
         if (!tipoPersonaExiste)
             return BadRequest<LoginResponseDto>("El tipo de persona seleccionado no existe o no está activo.");
@@ -183,18 +193,18 @@ public class AuthService : BaseService, IAuthService
         if (!tipoDocumentoExiste)
             return BadRequest<LoginResponseDto>("El tipo de documento seleccionado no existe o no está activo.");
 
-        if (request.IdOrganizacion.HasValue)
+        if (contextoRegistro == "GESTOR")
         {
             var organizacionExiste = await _identityContext.TOrganizaciones
-                .AnyAsync(o => o.IdOrganizacion == request.IdOrganizacion.Value && o.Activo == true);
+                .AnyAsync(o => o.IdOrganizacion == request.IdOrganizacion!.Value && o.Activo == true);
             if (!organizacionExiste)
                 return BadRequest<LoginResponseDto>("La organización seleccionada no existe o no está activa.");
         }
 
-        if (request.IdProveedor.HasValue)
+        if (contextoRegistro == "PROVEEDOR")
         {
             var proveedorExiste = await _identityContext.TProveedores
-                .AnyAsync(p => p.Id == request.IdProveedor.Value);
+                .AnyAsync(p => p.Id == request.IdProveedor!.Value);
             if (!proveedorExiste)
                 return BadRequest<LoginResponseDto>("El proveedor seleccionado no existe o no está activo.");
         }
@@ -235,22 +245,22 @@ public class AuthService : BaseService, IAuthService
             _identityContext.TUsuarios.Add(usuario);
             await _identityContext.SaveChangesAsync();
 
-            if (request.IdOrganizacion.HasValue)
+            if (contextoRegistro == "GESTOR")
             {
                 var jurisdiccion = new TJurisdiccionesUsuario
                 {
                     IdUsuario = usuario.Id,
-                    IdOrganizacion = request.IdOrganizacion.Value,
+                    IdOrganizacion = request.IdOrganizacion!.Value,
                     EsPrincipal = true
                 };
                 PrepareAuditableEntity(jurisdiccion, isNew: true);
                 _identityContext.TJurisdiccionesUsuarios.Add(jurisdiccion);
             }
-            else if (request.IdProveedor.HasValue)
+            else if (contextoRegistro == "PROVEEDOR")
             {
                 var representante = new TProveedoresRepresentante
                 {
-                    IdProveedor = request.IdProveedor.Value,
+                    IdProveedor = request.IdProveedor!.Value,
                     IdPersona = persona.Id,
                     EsApoderado = false
                 };
@@ -293,7 +303,9 @@ public class AuthService : BaseService, IAuthService
     {
         var roles = await _identityContext.TRoles.AsNoTracking().ToListAsync();
 
-        if (request.IdOrganizacion.HasValue)
+        var contextoRegistro = ObtenerTipoContextoRegistro(request);
+
+        if (contextoRegistro == "GESTOR")
         {
             return roles.FirstOrDefault(r =>
                 RoleNameContains(r.Nombre, "GESTOR") ||
@@ -302,7 +314,7 @@ public class AuthService : BaseService, IAuthService
                 RoleNameContains(r.Nombre, "INVERSA"));
         }
 
-        if (request.IdProveedor.HasValue)
+        if (contextoRegistro == "PROVEEDOR")
         {
             return roles.FirstOrDefault(r =>
                 RoleNameContains(r.Nombre, "PROVEEDOR") ||
@@ -393,7 +405,7 @@ public class AuthService : BaseService, IAuthService
             new(ClaimTypes.Role, usuario.IdRolNavigation.Nombre)
         };
 
-        // LÓGICA DE CONTEXTO ESTRICTO (O uno, o el otro)
+        // Lógica de contexto estricto: la entidad define dónde opera; el rol define qué puede hacer.
         if (idOrganizacionContexto.HasValue)
         {
             claims.Add(new Claim("IdOrganizacion", idOrganizacionContexto.Value.ToString()));
@@ -406,15 +418,19 @@ public class AuthService : BaseService, IAuthService
         }
         else
         {
-            var orgPrincipal = _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null && j.EsPrincipal == true)
-                            ?? _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null);
-
-            if (orgPrincipal != null)
+            if (RolPuedeOperarContexto(usuario.IdRolNavigation.Nombre, "GESTOR"))
             {
-                claims.Add(new Claim("IdOrganizacion", orgPrincipal.IdOrganizacion.ToString()));
-                claims.Add(new Claim("TipoContexto", "GESTOR"));
+                var orgPrincipal = _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null && j.EsPrincipal == true)
+                                ?? _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null);
+
+                if (orgPrincipal != null)
+                {
+                    claims.Add(new Claim("IdOrganizacion", orgPrincipal.IdOrganizacion.ToString()));
+                    claims.Add(new Claim("TipoContexto", "GESTOR"));
+                }
             }
-            else
+
+            if (!claims.Any(c => c.Type == "TipoContexto") && RolPuedeOperarContexto(usuario.IdRolNavigation.Nombre, "PROVEEDOR"))
             {
                 var proveedor = _identityContext.TProveedoresRepresentantes.FirstOrDefault(pr => pr.IdPersona == usuario.IdPersona && pr.FecBaja == null);
                 if (proveedor != null)
@@ -437,6 +453,67 @@ public class AuthService : BaseService, IAuthService
         var tokenHandler = new JwtSecurityTokenHandler();
         var token = tokenHandler.CreateToken(tokenDescriptor);
         return tokenHandler.WriteToken(token);
+    }
+
+    private static string NormalizarTipoContexto(string? tipo)
+        => (tipo ?? string.Empty).Trim().ToUpperInvariant();
+
+    private static bool EsTipoContextoValido(string tipo)
+        => tipo is "GESTOR" or "PROVEEDOR";
+
+    private static string? ObtenerTipoContextoRegistro(RegisterRequestDto request)
+    {
+        var tieneOrganizacion = request.IdOrganizacion.HasValue;
+        var tieneProveedor = request.IdProveedor.HasValue;
+
+        if (tieneOrganizacion == tieneProveedor)
+            return null;
+
+        return tieneOrganizacion ? "GESTOR" : "PROVEEDOR";
+    }
+
+    private static bool RolPuedeOperarContexto(string? roleName, string tipoContexto)
+    {
+        if (string.IsNullOrWhiteSpace(roleName))
+            return false;
+
+        if (RoleNameContains(roleName, "SUPERADMIN"))
+            return true;
+
+        return tipoContexto switch
+        {
+            "GESTOR" =>
+                RoleNameContains(roleName, "GESTOR") ||
+                RoleNameContains(roleName, "OPERADOR") ||
+                RoleNameContains(roleName, "ADMIN") ||
+                RoleNameContains(roleName, "LICITACION") ||
+                RoleNameContains(roleName, "LICITACIÓN") ||
+                RoleNameContains(roleName, "INVERSA"),
+            "PROVEEDOR" =>
+                RoleNameContains(roleName, "PROVEEDOR") ||
+                RoleNameContains(roleName, "DIRECTA"),
+            _ => false
+        };
+    }
+
+    private static List<EntidadDto> ObtenerEntidadesOperables(TUsuario usuario)
+    {
+        var entidades = new List<EntidadDto>();
+        var rol = usuario.IdRolNavigation.Nombre;
+
+        if (RolPuedeOperarContexto(rol, "GESTOR"))
+        {
+            foreach (var j in usuario.TJurisdiccionesUsuarios.Where(x => x.FecBaja == null))
+                entidades.Add(new EntidadDto { Id = j.IdOrganizacion, Tipo = "GESTOR", Nombre = j.IdOrganizacionNavigation.Nombre });
+        }
+
+        if (RolPuedeOperarContexto(rol, "PROVEEDOR"))
+        {
+            foreach (var p in usuario.IdPersonaNavigation.TProveedoresRepresentantes.Where(x => x.FecBaja == null))
+                entidades.Add(new EntidadDto { Id = p.IdProveedor, Tipo = "PROVEEDOR", Nombre = p.IdProveedorNavigation.RazonSocial });
+        }
+
+        return entidades;
     }
 
     public async Task<OperationResponse<bool>> ConfirmarEmailAsync(ConfirmEmailRequestDto request)

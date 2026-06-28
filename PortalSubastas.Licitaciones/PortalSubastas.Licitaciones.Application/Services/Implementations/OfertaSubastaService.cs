@@ -15,6 +15,7 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
     private new readonly PortalSubastasContext _context;
     private readonly ISubastaNotificationService _notificationService;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IProviderLookupService _providerLookupService;
 
     public OfertaSubastaService(
         PortalSubastasContext context,
@@ -22,12 +23,14 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
         ISubastaNotificationService notificationService,
-        IPublishEndpoint publishEndpoint)
+        IPublishEndpoint publishEndpoint,
+        IProviderLookupService providerLookupService)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _notificationService = notificationService;
         _publishEndpoint = publishEndpoint;
+        _providerLookupService = providerLookupService;
     }
 
     public async Task<OperationResponse<List<OfertaItemResponseDto>>> ProcesarOfertasAsync(int idCotizacion, List<OfertaItemRequestDto> ofertas)
@@ -249,8 +252,19 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
                 var res = resultados.First(r => r.IdCotizacionDetalle == ov.IdCotizacionDetalle && r.IdRenglon == ov.IdRenglon);
                 res.IdOfertaSubasta = ov.IdOfertaSubasta;
 
+                var proveedores = await _providerLookupService.GetByIdsAsync(new[] { ov.IdProveedor });
+                proveedores.TryGetValue(ov.IdProveedor, out var proveedorInfo);
+
                 await _notificationService.NotificarNuevaOfertaAsync(
-                    idCotizacion, ov.IdOfertaSubasta, ov.IdCotizacionDetalle, ov.IdRenglon, ov.Monto, ov.IdProveedor, ov.FechaOferta
+                    idCotizacion,
+                    ov.IdOfertaSubasta,
+                    ov.IdCotizacionDetalle,
+                    ov.IdRenglon,
+                    ov.Monto,
+                    ov.IdProveedor,
+                    ov.FechaOferta,
+                    proveedorInfo?.RazonSocial,
+                    ov.UsrIng
                 );
             }
 
@@ -279,18 +293,34 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
             .Where(o => o.IdCotizacion == idCotizacion)
             .OrderBy(o => o.Monto)
             .ThenBy(o => o.FechaOferta)
-            .Select(o => new
+            .ThenBy(o => o.IdOfertaSubasta)
+            .ToListAsync();
+
+        var providers = await _providerLookupService.GetByIdsAsync(ofertas.Select(o => o.IdProveedor));
+
+        var response = ofertas.Select(o =>
+        {
+            providers.TryGetValue(o.IdProveedor, out var provider);
+            var proveedor = provider?.RazonSocial ?? $"Proveedor #{o.IdProveedor}";
+            var representante = string.IsNullOrWhiteSpace(o.UsrIng) || o.UsrIng == "SISTEMA"
+                ? null
+                : o.UsrIng;
+
+            return new
             {
                 o.IdOfertaSubasta,
                 o.IdProveedor,
+                Proveedor = proveedor,
+                Representante = representante,
+                Usuario = representante ?? proveedor,
                 o.IdCotizacionDetalle,
                 o.IdRenglon,
                 o.Monto,
                 FechaOferta = o.FechaOferta.ToString("yyyy-MM-ddTHH:mm:ss")
-            })
-            .ToListAsync();
+            };
+        }).ToList();
 
-        return Ok<object>(ofertas);
+        return Ok<object>(response);
     }
 
     public async Task<OperationResponse<object>> GetMisOfertasAsync()
