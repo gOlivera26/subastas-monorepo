@@ -30,7 +30,18 @@ public class SubastaNotificationService : ISubastaNotificationService
                 : representante
         };
 
-        await _hubContext.Clients.Group($"subasta_{idCotizacion}").SendAsync("OfertaRecibida", payloadOferta);
+        await _hubContext.Clients.Group($"subasta_{idCotizacion}_proveedor_{idProveedor}").SendAsync("OfertaRecibida", payloadOferta);
+    }
+
+    public async Task NotificarMejorOfertaActualizadaAsync(int idCotizacion, int? idCotizacionDetalle, int? idRenglon, decimal mejorMonto)
+    {
+        await _hubContext.Clients.Group($"subasta_{idCotizacion}").SendAsync("MejorOfertaActualizada", new
+        {
+            idCotizacion = idCotizacion,
+            idCotizacionDetalle = idCotizacionDetalle,
+            idRenglon = idRenglon,
+            mejorMonto = (double)mejorMonto
+        });
     }
 
     public async Task NotificarProrrogaAsync(int idCotizacion, DateTime nuevaFechaFin)
