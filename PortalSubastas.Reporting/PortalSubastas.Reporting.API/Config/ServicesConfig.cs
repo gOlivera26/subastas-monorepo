@@ -136,7 +136,7 @@ public static class ServicesConfig
     {
         services.AddHttpClient<IReportDataService, ReportDataService>(client =>
         {
-            var baseUrl = configuration["Services:Licitaciones:BaseUrl"] ?? "http://licitaciones-api:8080";
+            var baseUrl = configuration["Services:Licitaciones:BaseUrl"] ?? "http://licitaciones:8080";
             client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         });
 

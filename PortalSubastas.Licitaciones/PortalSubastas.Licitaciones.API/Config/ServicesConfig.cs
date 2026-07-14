@@ -61,7 +61,7 @@ public static class ServicesConfig
 
         services.AddHttpClient<IProviderLookupService, ProviderLookupService>(client =>
         {
-            var baseUrl = configuration["Services:Providers:BaseUrl"] ?? "http://providers-api:8080";
+            var baseUrl = configuration["Services:Providers:BaseUrl"] ?? "http://providers:8080";
             client.BaseAddress = new Uri(baseUrl);
         });
 
