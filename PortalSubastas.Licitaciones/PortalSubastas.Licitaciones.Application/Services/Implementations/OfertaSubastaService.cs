@@ -319,6 +319,7 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
     public async Task<OperationResponse<object>> GetHistorialAsync(int idCotizacion)
     {
         var idProveedor = GetUserProveedorId();
+        var esAdmin = IsSuperAdmin();
 
         var ofertas = await _context.TOfertasSubastas
             .Where(o => o.IdCotizacion == idCotizacion)
@@ -330,12 +331,15 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
         var providers = await _providerLookupService.GetByIdsAsync(ofertas.Select(o => o.IdProveedor));
 
         var ofertasPropias = ofertas
-            .Where(o => !idProveedor.HasValue || o.IdProveedor == idProveedor.Value)
             .Select(o =>
             {
                 providers.TryGetValue(o.IdProveedor, out var provider);
-                var proveedor = provider?.RazonSocial ?? $"Proveedor #{o.IdProveedor}";
-                var representante = string.IsNullOrWhiteSpace(o.UsrIng) || o.UsrIng == "SISTEMA"
+
+                bool esPropia = idProveedor.HasValue && o.IdProveedor == idProveedor.Value;
+                bool puedeVerNombresReales = esAdmin || esPropia;
+
+                var proveedorReal = provider?.RazonSocial ?? $"Proveedor #{o.IdProveedor}";
+                var representanteReal = string.IsNullOrWhiteSpace(o.UsrIng) || o.UsrIng == "SISTEMA"
                     ? null
                     : o.UsrIng;
 
@@ -343,9 +347,9 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
                 {
                     o.IdOfertaSubasta,
                     o.IdProveedor,
-                    Proveedor = proveedor,
-                    Representante = representante,
-                    Usuario = representante ?? proveedor,
+                    Proveedor = puedeVerNombresReales ? proveedorReal : "Proveedor Anónimo",
+                    Representante = puedeVerNombresReales ? representanteReal : null,
+                    Usuario = puedeVerNombresReales ? (representanteReal ?? proveedorReal) : "Proveedor Anónimo",
                     o.IdCotizacionDetalle,
                     o.IdRenglon,
                     o.Monto,

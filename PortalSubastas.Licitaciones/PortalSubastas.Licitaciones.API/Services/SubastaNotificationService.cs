@@ -30,7 +30,7 @@ public class SubastaNotificationService : ISubastaNotificationService
                 : representante
         };
 
-        await _hubContext.Clients.Group($"subasta_{idCotizacion}_proveedor_{idProveedor}").SendAsync("OfertaRecibida", payloadOferta);
+        await _hubContext.Clients.Group($"subasta_{idCotizacion}").SendAsync("OfertaRecibida", payloadOferta);
     }
 
     public async Task NotificarMejorOfertaActualizadaAsync(int idCotizacion, int? idCotizacionDetalle, int? idRenglon, decimal mejorMonto)
