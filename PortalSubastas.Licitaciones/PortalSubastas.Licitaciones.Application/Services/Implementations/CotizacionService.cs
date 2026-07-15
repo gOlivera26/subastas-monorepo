@@ -73,7 +73,7 @@ public class CotizacionService : BaseService, ICotizacionService
 
         dto.Tipo = entity.IdTipoContratacion.ToDisplayName();
         dto.Estado = GetEstadoNombre(entity.IdEstado);
-        dto.Modalidad = entity.Especificacion?.Redeterminacion switch { "1" => "PÃºblica", "0" => "Privada", "2" => "Cerrada", _ => "No definida" };
+        dto.Modalidad = entity.Especificacion?.Redeterminacion switch { "1" => "Pública", "0" => "Privada", "2" => "Cerrada", _ => "No definida" };
         if (dto.Especificacion != null)
         {
             dto.Especificacion.GestionDocumentacion = RequiereGestionDocumentacion(entity);
@@ -784,7 +784,7 @@ public class CotizacionService : BaseService, ICotizacionService
         entity.IdOrganizacion = GetUserOrganizationId() ?? dto.IdOrganizacion;
         if (entity.IdOrganizacion == 0) entity.IdOrganizacion = 1; // fallback
         
-        // Auto-numÃ©rico NRO_COTIZACION (simplificado para MVP, se deberÃ­a hacer transaccional)
+        // Auto-numérico NRO_COTIZACION (simplificado para MVP, se debería hacer transaccional)
         var vigencia = await _context.TVigencias.FindAsync(dto.IdVigencia);
         var maxCotizacion = await _context.TCotizaciones
             .Where(c => c.IdVigencia == dto.IdVigencia && c.IdUnidadAdm == dto.IdUnidadAdm)
@@ -902,7 +902,7 @@ public class CotizacionService : BaseService, ICotizacionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "âš ï¸ No se pudo publicar SubastaPublicadaEvent para CotizaciÃ³n {IdCotizacion}. El flujo continÃºa.", id);
+            _logger.LogWarning(ex, "No se pudo publicar SubastaPublicadaEvent para Cotización {IdCotizacion}. El flujo continúa.", id);
         }
 
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
@@ -916,7 +916,7 @@ public class CotizacionService : BaseService, ICotizacionService
 
         if (proveedoresActivos.Count == 0)
         {
-            _logger.LogInformation("âš ï¸ No hay proveedores activos para CotizaciÃ³n {IdCotizacion}. No se publica SubastaPublicadaEvent.", entity.IdCotizacion);
+            _logger.LogInformation("No hay proveedores activos para Cotización {IdCotizacion}. No se publica SubastaPublicadaEvent.", entity.IdCotizacion);
             return;
         }
 
@@ -935,7 +935,7 @@ public class CotizacionService : BaseService, ICotizacionService
 
         if (proveedoresInfo.Count == 0)
         {
-            _logger.LogInformation("âš ï¸ No se encontraron datos de proveedores activos para CotizaciÃ³n {IdCotizacion}.", entity.IdCotizacion);
+            _logger.LogInformation("No se encontraron datos de proveedores activos para Cotización {IdCotizacion}.", entity.IdCotizacion);
             return;
         }
 
@@ -953,7 +953,7 @@ public class CotizacionService : BaseService, ICotizacionService
         );
 
         await _publishEndpoint.Publish(subastaEvent);
-        _logger.LogInformation("ðŸ“§ SubastaPublicadaEvent publicado: CotizaciÃ³n {IdCotizacion}, {Count} proveedores", entity.IdCotizacion, proveedoresInfo.Count);
+        _logger.LogInformation("SubastaPublicadaEvent publicado: Cotización {IdCotizacion}, {Count} proveedores", entity.IdCotizacion, proveedoresInfo.Count);
     }
 
     public async Task<OperationResponse<CotizacionResponseDto>> FinalizarAsync(int id)
@@ -1033,7 +1033,7 @@ public class CotizacionService : BaseService, ICotizacionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "âš ï¸ No se pudo publicar SubastaDesistidaEvent para CotizaciÃ³n {IdCotizacion}", id);
+            _logger.LogWarning(ex, "No se pudo publicar SubastaDesistidaEvent para Cotización {IdCotizacion}", id);
         }
 
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
@@ -1055,14 +1055,14 @@ public class CotizacionService : BaseService, ICotizacionService
         if (!esAdmin && proveedorId.HasValue)
         {
             query = query.Where(c =>
-                // REGLA 1: Descartar automÃ¡ticamente si el proveedor desistiÃ³ (Ganadora == "D")
+                // REGLA 1: Descartar automáticamente si el proveedor desistió (Ganadora == "D")
                 !c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.Ganadora == "D" && p.FecBaja == null)
                 &&
                 (
-                    // REGLA 2: Es pÃºblica
+                    // REGLA 2: Es pública
                     c.Especificacion.Redeterminacion == "1"
                     ||
-                    // REGLA 3: Es Privada/Cerrada pero el proveedor ESTÃ invitado
+                    // REGLA 3: Es Privada/Cerrada pero el proveedor ESTÁ invitado
                     (c.Especificacion.Redeterminacion != "1" && c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.FecBaja == null))
                 )
             );
@@ -1122,7 +1122,7 @@ public class CotizacionService : BaseService, ICotizacionService
             .Include(c => c.Ofertas)
             .AsQueryable();
 
-        // Filtros bÃ¡sicos
+        // Filtros básicos
         if (idVigencia.HasValue)
             query = query.Where(c => c.IdVigencia == idVigencia.Value);
 
@@ -1148,19 +1148,19 @@ public class CotizacionService : BaseService, ICotizacionService
         var esAdmin = IsSuperAdmin();
         var proveedorId = GetUserProveedorId();
 
-        // LÃ³gica de visibilidad (replica del sistema viejo)
+        // Lógica de visibilidad (replica del sistema viejo)
         // Admin ve todo. Proveedor solo ve:
-        // - Subastas PÃºblicas (Redeterminacion = "1")
-        // - Subastas Privadas (Redeterminacion = "0") donde estÃ¡ invitado
-        // - NO ve Cerradas (Redeterminacion = "2") a menos que estÃ© invitado
-        // LÃ³gica de visibilidad (replica del sistema viejo)
+        // - Subastas Públicas (Redeterminacion = "1")
+        // - Subastas Privadas (Redeterminacion = "0") donde está invitado
+        // - NO ve Cerradas (Redeterminacion = "2") a menos que esté invitado
+        // Lógica de visibilidad (replica del sistema viejo)
         if (!esAdmin && proveedorId.HasValue)
         {
             query = query.Where(c =>
                 !c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.Ganadora == "D" && p.FecBaja == null)
                 &&
                 (
-                    c.Especificacion.Redeterminacion == "1" // PÃºblica: todos ven
+                    c.Especificacion.Redeterminacion == "1" // Pública: todos ven
                     || (c.Especificacion.Redeterminacion == "0" && c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.FecBaja == null)) // Privada
                     || (c.Especificacion.Redeterminacion == "2" && c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.FecBaja == null)) // Cerrada
                 )
@@ -1224,7 +1224,7 @@ public class CotizacionService : BaseService, ICotizacionService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "âš ï¸ No se pudo publicar SubastaProrrogadaEvent para CotizaciÃ³n {IdCotizacion}", id);
+            _logger.LogWarning(ex, "No se pudo publicar SubastaProrrogadaEvent para Cotización {IdCotizacion}", id);
         }
 
         return Ok(_mapper.Map<CotizacionResponseDto>(entity));
@@ -1240,7 +1240,7 @@ public class CotizacionService : BaseService, ICotizacionService
             .FirstOrDefaultAsync(p => p.IdCotizacion == idCotizacion && p.IdProveedor == idProveedor.Value && p.FecBaja == null);
 
         if (participacion == null)
-            return BadRequest<bool>("No estÃ¡s asignado como proveedor a esta subasta.");
+            return BadRequest<bool>("No estás asignado como proveedor a esta subasta.");
 
         participacion.Ganadora = "D";
         PrepareAuditableEntity(participacion, isNew: false);
@@ -1632,7 +1632,7 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
             int cantItems = 0;
             var ofertasActivas = c.Ofertas.Where(o => o.FecBaja == null).ToList();
 
-            // 1. Calcular Precio Base y Cantidad de Ãtems
+            // 1. Calcular Precio Base y Cantidad de Ítems
             if (isRenglon)
             {
                 cantItems = c.Renglones.Count(r => r.FecBaja == null);
@@ -1719,7 +1719,7 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
         if (entity == null || entity.Especificacion == null)
             return NotFound<SubastaPublicaDetalleDto>();
 
-        // Mapeo del CatÃ¡logo de Bienes (Ahora traemos Nombre y CÃ³digo)
+        // Mapeo del Catálogo de Bienes (Ahora traemos Nombre y Código)
         var itemIds = entity.Detalles.Select(d => d.IdItem).Distinct().ToList();
         var itemsMap = await _context.TCatalogosBiens
             .Where(i => itemIds.Contains(i.IdItem))
@@ -1805,7 +1805,7 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
                     IdElemento = det.IdCotizacionDetalle,
                     EsRenglon = false,
                     Codigo = catalogData?.Codigo ?? "-",
-                    Descripcion = catalogData?.NItem ?? $"Ãtem #{det.IdItem}",
+                    Descripcion = catalogData?.NItem ?? $"Ítem #{det.IdItem}",
                     Unidad = "UN", // Unidad por defecto
                     Cantidad = det.Cantidad,
                     PrecioBase = Math.Round(det.ImporteBase, 2),
@@ -1814,7 +1814,7 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
             }
         }
 
-        // Extraemos las ofertas ordenadas por fecha para el grÃ¡fico
+        // Extraemos las ofertas ordenadas por fecha para el gráfico
         var historial = todasLasOfertas
             .OrderBy(o => o.FechaOferta)
             .Select(o => new OfertaPublicaDto
