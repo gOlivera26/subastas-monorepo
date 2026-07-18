@@ -232,6 +232,15 @@ public class ProviderService : BaseService, IProviderService
         return Ok(url);
     }
 
+    public async Task<OperationResponse<string>> GetConstanciaAfipUrlAsync(int providerId)
+    {
+        var proveedor = await _context.TProveedores.FindAsync(providerId);
+        if (proveedor == null || string.IsNullOrEmpty(proveedor.UrlConstanciaAfip))
+            return NotFound<string>();
+
+        return Ok(proveedor.UrlConstanciaAfip);
+    }
+
     private async Task<List<int>> GetRubroAndChildrenIdsAsync(int rubroId)
     {
         var result = new List<int> { rubroId };

@@ -1,4 +1,7 @@
-﻿using Resend;
+﻿using FluentValidation;
+using FluentValidation.AspNetCore;
+using PortalSubastas.Identity.Application.RequestDto.Login;
+using Resend;
 
 namespace PortalSubastas.Identity.API.Config;
 
@@ -162,6 +165,9 @@ public static class ServicesConfig
         services.AddScoped<ICategoriaProgramaticaService, CategoriaProgramaticaService>();
         services.AddScoped<IMonedaService, MonedaService>();
         services.AddScoped<ISubResponsableService, SubResponsableService>();
+
+        services.AddFluentValidationAutoValidation();
+        services.AddValidatorsFromAssembly(typeof(LoginRequestDto).Assembly);
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)

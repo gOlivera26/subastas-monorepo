@@ -1,3 +1,6 @@
+using PortalSubastas.Providers.Application.ResponseDto.Proveedor;
+using PortalSubastas.Providers.Domain.Models;
+
 namespace PortalSubastas.Providers.Application.AutoMapper;
 
 public class ProviderProfile : Profile
@@ -8,6 +11,7 @@ public class ProviderProfile : Profile
         CreateMap<TProveedore, ProviderListDto>()
             .ForMember(dest => dest.TipoPersona, opt => opt.MapFrom(src => src.IdTipoPersonaNavigation.Descripcion))
             .ForMember(dest => dest.HasConstanciaAfip, opt => opt.MapFrom(src => !string.IsNullOrEmpty(src.UrlConstanciaAfip)))
+            .ForMember(dest => dest.UrlConstanciaAfip, opt => opt.MapFrom(src => src.UrlConstanciaAfip))
             .ForMember(dest => dest.RubrosCount, opt => opt.MapFrom(src => src.TProveedoresRubros.Count(r => r.FecBaja == null)))
             .ForMember(dest => dest.DomiciliosCount, opt => opt.Ignore());
         CreateMap<CreateProviderDto, TProveedore>();
@@ -34,5 +38,6 @@ public class ProviderProfile : Profile
 
         CreateMap<TTipoDomicilio, TipoDomicilioDto>();
         CreateMap<TProvincia, ProvinciaDto>();
+        CreateMap<TTiposPersona, TipoPersonaDto>();
     }
 }

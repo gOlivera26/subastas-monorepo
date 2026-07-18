@@ -8,14 +8,14 @@ public class AuthService : BaseService, IAuthService
     private readonly IEmailService _emailService;
 
     public AuthService(
-    PortalSubastasContext context,
-    IConfiguration configuration,
-    IMapper mapper,
-    IHttpContextAccessor httpContextAccessor,
-    IMemoryCache cache,
-    IPublishEndpoint publishEndpoint,
-    IEmailService emailService)
-    : base(context, mapper, httpContextAccessor, cache)
+        PortalSubastasContext context,
+        IConfiguration configuration,
+        IMapper mapper,
+        IHttpContextAccessor httpContextAccessor,
+        IMemoryCache cache,
+        IPublishEndpoint publishEndpoint,
+        IEmailService emailService)
+        : base(context, mapper, httpContextAccessor, cache)
     {
         _identityContext = context;
         _configuration = configuration;
@@ -77,8 +77,7 @@ public class AuthService : BaseService, IAuthService
             .ToList();
 
         var entidades = ObtenerEntidadesOperables(usuario);
-
-        var token = GenerarJwtToken(usuario); // Llama por defecto al primer contexto
+        var token = GenerarJwtToken(usuario);
 
         usuario.UltimoAcceso = DateTime.UtcNow;
         _identityContext.TUsuarios.Update(usuario);
@@ -130,7 +129,6 @@ public class AuthService : BaseService, IAuthService
         if (!RolPuedeOperarContexto(usuario.IdRolNavigation.Nombre, request.TipoEntidad))
             return BadRequest<LoginResponseDto>("El rol del usuario no permite operar en este contexto.");
 
-        // Validar que realmente pertenece a esa entidad
         if (request.TipoEntidad == "GESTOR")
         {
             var existe = await _identityContext.TJurisdiccionesUsuarios.AnyAsync(j => j.IdUsuario == userId && j.IdOrganizacion == request.IdEntidad && j.FecBaja == null);
@@ -276,19 +274,15 @@ public class AuthService : BaseService, IAuthService
 
         await _emailService.SendEmailAsync(
             request.Email,
-            "Confirmá tu correo electrónico — Trasus Argentina",
-            $@"
-                <h2>Gracias por registrarte</h2>
-                <p>Tu código de confirmación es:</p>
-                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{codigoConfirmacion}</h1>
-                <p>Este código expira en 30 minutos.</p>
-                <p>Si no solicitaste este registro, ignorá este mensaje.</p>
-                <hr>
-                <small>Trasus Argentina — Portal de Subastas</small>
-            ");
+            "Confirmá tu correo electrónico — OWEN",
+            EmailTemplateHelper.GetCodigoVerificationEmail(
+                "Verificación de cuenta",
+                "Gracias por registrarte en la plataforma. Utilizá el siguiente código para confirmar tu correo:",
+                codigoConfirmacion!)
+        );
 
         await PublishSystemLogAsync(_publishEndpoint, "NUEVO_REGISTRO", "IAM",
-    new { Mensaje = $"Nuevo usuario registrado en el sistema: {request.Email} (Documento: {request.NroDocumento})" });
+            new { Mensaje = $"Nuevo usuario registrado en el sistema: {request.Email} (Documento: {request.NroDocumento})" });
 
         return Ok(new LoginResponseDto
         {
@@ -360,7 +354,7 @@ public class AuthService : BaseService, IAuthService
         await _identityContext.SaveChangesAsync();
 
         await PublishSystemLogAsync(_publishEndpoint, "CAMBIO_PASSWORD", "IAM",
-    new { Mensaje = $"El usuario {usuario.EmailLogin} modificó su contraseña personal." });
+            new { Mensaje = $"El usuario {usuario.EmailLogin} modificó su contraseña personal." });
 
         return Ok(true);
     }
@@ -377,9 +371,6 @@ public class AuthService : BaseService, IAuthService
 
         if (usuario == null) return NotFound<ProfileResponseDto>();
 
-        if (string.IsNullOrWhiteSpace(request.Nombre) || string.IsNullOrWhiteSpace(request.Apellido))
-            return BadRequest<ProfileResponseDto>("El nombre y el apellido son obligatorios.");
-
         usuario.IdPersonaNavigation.Nombre = request.Nombre;
         usuario.IdPersonaNavigation.Apellido = request.Apellido;
         usuario.IdPersonaNavigation.Telefono = request.Telefono;
@@ -390,7 +381,6 @@ public class AuthService : BaseService, IAuthService
 
         return Ok(_mapper.Map<ProfileResponseDto>(usuario));
     }
-
 
     private string GenerarJwtToken(TUsuario usuario, int? idOrganizacionContexto = null, int? idProveedorContexto = null)
     {
@@ -405,7 +395,6 @@ public class AuthService : BaseService, IAuthService
             new(ClaimTypes.Role, usuario.IdRolNavigation.Nombre)
         };
 
-        // Lógica de contexto estricto: la entidad define dónde opera; el rol define qué puede hacer.
         if (idOrganizacionContexto.HasValue)
         {
             claims.Add(new Claim("IdOrganizacion", idOrganizacionContexto.Value.ToString()));
@@ -571,15 +560,12 @@ public class AuthService : BaseService, IAuthService
 
         await _emailService.SendEmailAsync(
             email,
-            "Nuevo código de confirmación — Trasus Argentina",
-            $@"
-                <h2>Acá va tu nuevo código</h2>
-                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{nuevoCodigo}</h1>
-                <p>Este código expira en 30 minutos.</p>
-                <p>Si no solicitaste este registro, ignorá este mensaje.</p>
-                <hr>
-                <small>Trasus Argentina — Portal de Subastas</small>
-            ");
+            "Nuevo código de confirmación — OWEN",
+            EmailTemplateHelper.GetCodigoVerificationEmail(
+                "Nuevo código generado",
+                "Solicitaste un nuevo código de verificación. Utilizá el siguiente código para confirmar tu correo:",
+                nuevoCodigo)
+        );
 
         if (ShouldExposeDevEmailCode())
         {
@@ -596,7 +582,6 @@ public class AuthService : BaseService, IAuthService
 
     public async Task<OperationResponse<bool>> SolicitarResetPasswordAsync(SolicitarResetRequestDto request)
     {
-        // Siempre OK aunque no exista el email — no revelar qué emails están registrados
         var usuario = await _identityContext.TUsuarios
             .Include(u => u.IdEstadoNavigation)
             .FirstOrDefaultAsync(u => u.EmailLogin == request.Email);
@@ -613,17 +598,12 @@ public class AuthService : BaseService, IAuthService
 
         await _emailService.SendEmailAsync(
             request.Email,
-            "Código de recuperación — Trasus Argentina",
-            $@"
-                <h2>Recuperación de contraseña</h2>
-                <p>Recibimos una solicitud para restablecer tu contraseña.</p>
-                <p>Tu código de verificación es:</p>
-                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{codigo}</h1>
-                <p>Este código expira en 30 minutos.</p>
-                <p>Si no solicitaste este cambio, ignorá este mensaje.</p>
-                <hr>
-                <small>Trasus Argentina — Portal de Subastas</small>
-            ");
+            "Código de recuperación — OWEN",
+            EmailTemplateHelper.GetCodigoVerificationEmail(
+                "Recuperación de contraseña",
+                "Recibimos una solicitud para restablecer tu contraseña. Tu código de verificación es:",
+                codigo)
+        );
 
         return Ok(true);
     }
@@ -689,15 +669,9 @@ public class AuthService : BaseService, IAuthService
         {
             await _emailService.SendEmailAsync(
                 admin.EmailLogin,
-                "Nuevo usuario pendiente de aprobación — Trasus Argentina",
-                $@"
-                    <h2>Nuevo registro en el sistema</h2>
-                    <p>El usuario <strong>{usuario.IdPersonaNavigation?.Nombre} {usuario.IdPersonaNavigation?.Apellido}</strong>
-                    ({usuario.EmailLogin}) confirmó su correo y está esperando aprobación.</p>
-                    <p>Ingresá al panel de administración para revisar la solicitud.</p>
-                    <hr>
-                    <small>Trasus Argentina — Portal de Subastas</small>
-                ");
+                "Nuevo usuario pendiente de aprobación — OWEN",
+                EmailTemplateHelper.GetAlertaNuevoUsuarioEmail($"{usuario.IdPersonaNavigation?.Nombre} {usuario.IdPersonaNavigation?.Apellido}", usuario.EmailLogin)
+            );
         }
     }
 }

@@ -13,4 +13,5 @@ public interface IProviderService
     Task<OperationResponse<bool>> LinkProviderRubrosAsync(int providerId, List<int> rubroIds);
     Task<OperationResponse<bool>> UnlinkProviderRubroAsync(int providerId, int rubroId);
     Task<OperationResponse<string>> UploadConstanciaAfipAsync(int providerId, Stream fileStream, string fileName, string contentType);
+    Task<OperationResponse<string>> GetConstanciaAfipUrlAsync(int providerId);
 }

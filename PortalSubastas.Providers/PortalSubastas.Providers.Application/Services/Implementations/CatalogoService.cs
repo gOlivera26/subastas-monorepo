@@ -1,3 +1,5 @@
+using PortalSubastas.Providers.Application.ResponseDto.Proveedor;
+
 namespace PortalSubastas.Providers.Application.Services.Implementations;
 
 public class CatalogoService : BaseService, ICatalogoService
@@ -34,5 +36,18 @@ public class CatalogoService : BaseService, ICatalogoService
             return NotFound<List<ProvinciaDto>>();
 
         return Ok(_mapper.Map<List<ProvinciaDto>>(provincias));
+    }
+
+    public async Task<OperationResponse<List<TipoPersonaDto>>> GetTiposPersonaAsync()
+    {
+        var tipos = await _context.TTiposPersonas
+            .Where(t => t.FecBaja == null)
+            .OrderBy(t => t.Descripcion)
+            .ToListAsync();
+
+        if (tipos.Count == 0)
+            return NotFound<List<TipoPersonaDto>>();
+
+        return Ok(_mapper.Map<List<TipoPersonaDto>>(tipos));
     }
 }

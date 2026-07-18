@@ -1,5 +1,6 @@
 using PortalSubastas.Providers.Application.RequestDto.Proveedor;
 using PortalSubastas.Providers.Application.ResponseDto.Proveedor;
+using PortalSubastas.Providers.Application.Services.Interfaces;
 
 namespace PortalSubastas.Providers.API.Controllers;
 
@@ -9,11 +10,13 @@ public class ProviderController : BaseController
 {
     private readonly IProviderService _providerService;
     private readonly IAfipService _afipService;
+    private readonly IFileStorageService _fileStorageService;
 
-    public ProviderController(IProviderService providerService, IAfipService afipService)
+    public ProviderController(IProviderService providerService, IAfipService afipService, IFileStorageService fileStorageService)
     {
         _providerService = providerService;
         _afipService = afipService;
+        _fileStorageService = fileStorageService;
     }
 
     [HttpGet("verify/{cuit}")]
@@ -84,6 +87,24 @@ public class ProviderController : BaseController
         using var stream = file.OpenReadStream();
         var result = await _providerService.UploadConstanciaAfipAsync(providerId, stream, file.FileName, file.ContentType);
         return Return(result);
+    }
+
+    [HttpGet("{providerId}/constancia-afip")]
+    public async Task<IActionResult> DownloadConstanciaAfip(int providerId)
+    {
+        var result = await _providerService.GetConstanciaAfipUrlAsync(providerId);
+        if (!result.Success || string.IsNullOrEmpty(result.Data))
+            return Return(OperationResponse<string>.CustomErrorResponse(404, "No se encontró la constancia de AFIP."));
+
+        try
+        {
+            var fileStream = await _fileStorageService.DownloadFileAsync(result.Data);
+            return File(fileStream, "application/pdf");
+        }
+        catch (Exception ex)
+        {
+            return Return(OperationResponse<string>.ErrorResponse(ex.Message));
+        }
     }
 
     [HttpGet("{providerId}/rubros")]
