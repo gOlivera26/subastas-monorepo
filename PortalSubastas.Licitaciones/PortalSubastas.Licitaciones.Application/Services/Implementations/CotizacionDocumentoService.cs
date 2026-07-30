@@ -62,7 +62,7 @@ namespace PortalSubastas.Licitaciones.Application.Services.Implementations
             {
                 IdCotizacion = dto.IdCotizacion,
                 TipoDocumento = dto.TipoDocumento.ToUpper(),
-                NombreArchivo = dto.Archivo.FileName,
+                NombreArchivo = Path.GetFileName(dto.Archivo.FileName),
                 UrlArchivo = urlArchivo
             };
 

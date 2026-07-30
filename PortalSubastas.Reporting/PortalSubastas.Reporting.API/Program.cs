@@ -10,6 +10,7 @@ builder.Services.AddConfig(builder.Configuration);
 
 var app = builder.Build();
 
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -19,6 +20,25 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapHealthChecks("/health").AllowAnonymous();
+app.MapGet("/health/ready", (IConfiguration configuration) =>
+{
+    var licitacionesBaseUrl = configuration["Services:Licitaciones:BaseUrl"];
+    var puppeteerEnabled = !configuration.GetValue("Security:KillSwitches:DisablePdfReports", false);
+
+    var ready = !string.IsNullOrWhiteSpace(licitacionesBaseUrl);
+    var payload = new
+    {
+        status = ready ? "Healthy" : "Degraded",
+        checks = new
+        {
+            licitaciones = ready ? "Configured" : "Missing configuration",
+            pdfRenderer = puppeteerEnabled ? "Enabled" : "Disabled by kill switch"
+        },
+        timestamp = DateTimeOffset.UtcNow
+    };
+
+    return Results.Json(payload, statusCode: ready ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
 
 app.UseCors();
 app.UseAuthentication();

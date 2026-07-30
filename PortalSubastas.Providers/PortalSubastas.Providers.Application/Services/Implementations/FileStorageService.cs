@@ -1,4 +1,4 @@
-using Amazon.S3;
+﻿using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Configuration;
 using PortalSubastas.Providers.Application.Services.Interfaces;
@@ -7,27 +7,22 @@ namespace PortalSubastas.Providers.Application.Services.Implementations;
 
 public class FileStorageService : IFileStorageService
 {
-    private readonly IAmazonS3 _s3Client;
-    private readonly string _bucketName;
+    private readonly string? _accessKey;
+    private readonly string? _secretKey;
+    private readonly string? _accountId;
+    private readonly string? _bucketName;
 
     public FileStorageService(IConfiguration config)
     {
-        var accessKey = config["CloudflareR2:AccessKey"] ?? throw new ArgumentNullException("AccessKey R2 faltante");
-        var secretKey = config["CloudflareR2:SecretKey"] ?? throw new ArgumentNullException("SecretKey R2 faltante");
-        var accountId = config["CloudflareR2:AccountId"] ?? throw new ArgumentNullException("AccountId R2 faltante");
-        _bucketName = config["CloudflareR2:BucketName"] ?? throw new ArgumentNullException("BucketName R2 faltante");
-
-        var s3Config = new AmazonS3Config
-        {
-            ServiceURL = $"https://{accountId}.r2.cloudflarestorage.com",
-        };
-
-        _s3Client = new AmazonS3Client(accessKey, secretKey, s3Config);
+        _accessKey = config["CloudflareR2:AccessKey"];
+        _secretKey = config["CloudflareR2:SecretKey"];
+        _accountId = config["CloudflareR2:AccountId"];
+        _bucketName = config["CloudflareR2:BucketName"];
     }
 
     public async Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType)
     {
-        // Generamos un nombre único y lo guardamos en la carpeta constancias-afip
+        var s3Client = CreateClient();
         var extension = Path.GetExtension(fileName);
         var uniqueFileName = $"constancias-afip/{Guid.NewGuid()}{extension}";
 
@@ -40,9 +35,7 @@ public class FileStorageService : IFileStorageService
             DisablePayloadSigning = true
         };
 
-        await _s3Client.PutObjectAsync(putRequest);
-
-        // Guardamos la ruta (Key) en la base de datos
+        await s3Client.PutObjectAsync(putRequest);
         return uniqueFileName;
     }
 
@@ -50,10 +43,9 @@ public class FileStorageService : IFileStorageService
     {
         try
         {
-            // fileUrl puede ser la URL completa o solo el Key. 
-            // Si es URL, extraemos el Key.
-            var key = fileUrl.Contains("http") 
-                ? new Uri(fileUrl).AbsolutePath.TrimStart('/') 
+            var s3Client = CreateClient();
+            var key = fileUrl.Contains("http")
+                ? new Uri(fileUrl).AbsolutePath.TrimStart('/')
                 : fileUrl;
 
             var deleteRequest = new DeleteObjectRequest
@@ -62,7 +54,7 @@ public class FileStorageService : IFileStorageService
                 Key = key
             };
 
-            await _s3Client.DeleteObjectAsync(deleteRequest);
+            await s3Client.DeleteObjectAsync(deleteRequest);
             return true;
         }
         catch
@@ -73,8 +65,9 @@ public class FileStorageService : IFileStorageService
 
     public async Task<Stream> DownloadFileAsync(string fileUrl)
     {
-        var key = fileUrl.Contains("http") 
-            ? new Uri(fileUrl).AbsolutePath.TrimStart('/') 
+        var s3Client = CreateClient();
+        var key = fileUrl.Contains("http")
+            ? new Uri(fileUrl).AbsolutePath.TrimStart('/')
             : fileUrl;
 
         var request = new GetObjectRequest
@@ -83,7 +76,25 @@ public class FileStorageService : IFileStorageService
             Key = key
         };
 
-        var response = await _s3Client.GetObjectAsync(request);
+        var response = await s3Client.GetObjectAsync(request);
         return response.ResponseStream;
+    }
+
+    private IAmazonS3 CreateClient()
+    {
+        if (string.IsNullOrWhiteSpace(_accessKey) ||
+            string.IsNullOrWhiteSpace(_secretKey) ||
+            string.IsNullOrWhiteSpace(_accountId) ||
+            string.IsNullOrWhiteSpace(_bucketName))
+        {
+            throw new InvalidOperationException("El almacenamiento documental de proveedores no está configurado.");
+        }
+
+        var s3Config = new AmazonS3Config
+        {
+            ServiceURL = $"https://{_accountId}.r2.cloudflarestorage.com",
+        };
+
+        return new AmazonS3Client(_accessKey, _secretKey, s3Config);
     }
 }

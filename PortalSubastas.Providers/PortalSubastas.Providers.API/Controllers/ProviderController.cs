@@ -1,6 +1,7 @@
-using PortalSubastas.Providers.Application.RequestDto.Proveedor;
+﻿using PortalSubastas.Providers.Application.RequestDto.Proveedor;
 using PortalSubastas.Providers.Application.ResponseDto.Proveedor;
 using PortalSubastas.Providers.Application.Services.Interfaces;
+using PortalSubastas.Providers.API.Security;
 
 namespace PortalSubastas.Providers.API.Controllers;
 
@@ -11,12 +12,14 @@ public class ProviderController : BaseController
     private readonly IProviderService _providerService;
     private readonly IAfipService _afipService;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IConfiguration _configuration;
 
-    public ProviderController(IProviderService providerService, IAfipService afipService, IFileStorageService fileStorageService)
+    public ProviderController(IProviderService providerService, IAfipService afipService, IFileStorageService fileStorageService, IConfiguration configuration)
     {
         _providerService = providerService;
         _afipService = afipService;
         _fileStorageService = fileStorageService;
+        _configuration = configuration;
     }
 
     [HttpGet("verify/{cuit}")]
@@ -25,7 +28,7 @@ public class ProviderController : BaseController
     {
         var result = await _providerService.VerifyCuitAsync(cuit);
         if (result.Success == false && result.Code == 404)
-            return Return(OperationResponse<ProviderResponseDto>.CustomErrorResponse(404, "El CUIT ingresado no se encuentra empadronado como proveedor. Comuniquese con la administracion."));
+            return Return(OperationResponse<ProviderResponseDto>.CustomErrorResponse(404, "El CUIT ingresado no se encuentra empadronado como proveedor. Comuníquese con la administración."));
         return Return(result);
     }
 
@@ -79,10 +82,12 @@ public class ProviderController : BaseController
     }
 
     [HttpPost("{providerId}/constancia-afip")]
+    [RequestSizeLimit(UploadSecurityPolicy.MaxDocumentBytes)]
     public async Task<IActionResult> UploadConstanciaAfip(int providerId, IFormFile file)
     {
-        if (file == null || file.Length == 0)
-            return Return(OperationResponse<string>.BadRequestResponse("No se selecciono ningun archivo."));
+        var validationError = await UploadSecurityPolicy.ValidateDocumentAsync(file, _configuration);
+        if (validationError is not null)
+            return Return(OperationResponse<string>.BadRequestResponse(validationError));
 
         using var stream = file.OpenReadStream();
         var result = await _providerService.UploadConstanciaAfipAsync(providerId, stream, file.FileName, file.ContentType);

@@ -23,10 +23,13 @@ public sealed class GlobalExceptionHandlingMiddleware
 
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/json";
+            var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? context.TraceIdentifier;
+            context.Response.Headers["X-Correlation-ID"] = correlationId;
 
             var response = OperationResponse<object>.CreateBuilder()
                 .WithCode(StatusCodes.Status500InternalServerError)
-                .WithMessage("Ocurrio un error interno en el microservicio de reporteria.")
+                .WithMessage("Ocurrió un error interno en el microservicio de reportería.")
+                .WithData(new { correlationId })
                 .Build();
 
             await context.Response.WriteAsync(JsonSerializer.Serialize(response));

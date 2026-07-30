@@ -1,5 +1,6 @@
 using PortalSubastas.Providers.Application.RequestDto.Proveedor;
 using PortalSubastas.Providers.Application.ResponseDto.Proveedor;
+using PortalSubastas.Providers.API.Security;
 
 namespace PortalSubastas.Providers.API.Controllers;
 
@@ -8,10 +9,12 @@ namespace PortalSubastas.Providers.API.Controllers;
 public class RubroController : BaseController
 {
     private readonly IRubroService _rubroService;
+    private readonly IConfiguration _configuration;
 
-    public RubroController(IRubroService rubroService)
+    public RubroController(IRubroService rubroService, IConfiguration configuration)
     {
         _rubroService = rubroService;
+        _configuration = configuration;
     }
 
     [HttpGet]
@@ -29,10 +32,12 @@ public class RubroController : BaseController
     }
 
     [HttpPost("bulk-upload")]
+    [RequestSizeLimit(UploadSecurityPolicy.MaxCsvBytes)]
     public async Task<IActionResult> BulkUploadRubros(IFormFile file)
     {
-        if (file == null || file.Length == 0)
-            return BadRequest("Debe adjuntar un archivo CSV.");
+        var validationError = UploadSecurityPolicy.ValidateCsv(file, _configuration);
+        if (validationError is not null)
+            return Return(OperationResponse<RubroBulkUploadResultDto>.BadRequestResponse(validationError));
 
         await using var stream = file.OpenReadStream();
         var result = await _rubroService.BulkUploadRubrosAsync(stream);

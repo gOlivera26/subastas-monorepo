@@ -25,6 +25,7 @@ builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
 app.UseOpenTelemetry();
@@ -38,6 +39,26 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapHealthChecks("/health").AllowAnonymous();
+app.MapGet("/health/ready", async (PortalSubastasContext db, IConfiguration configuration, CancellationToken cancellationToken) =>
+{
+    var dbOk = await db.Database.CanConnectAsync(cancellationToken);
+    var rabbitOk = !string.IsNullOrWhiteSpace(configuration["RabbitMq:Host"]) &&
+                   !string.IsNullOrWhiteSpace(configuration["RabbitMq:Username"]) &&
+                   !string.IsNullOrWhiteSpace(configuration["RabbitMq:Password"]);
+
+    var payload = new
+    {
+        status = dbOk && rabbitOk ? "Healthy" : "Degraded",
+        checks = new
+        {
+            database = dbOk ? "Healthy" : "Unhealthy",
+            rabbitMq = rabbitOk ? "Configured" : "Missing configuration"
+        },
+        timestamp = DateTimeOffset.UtcNow
+    };
+
+    return Results.Json(payload, statusCode: dbOk && rabbitOk ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
 
 app.UseCors();
 

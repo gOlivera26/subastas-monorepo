@@ -2,6 +2,14 @@
 
 public class AuthService : BaseService, IAuthService
 {
+    private const string InvalidLoginMessage = "Credenciales inválidas o usuario no autorizado.";
+    private const string LoginLockoutMessage = "Demasiados intentos fallidos. Intentá nuevamente más tarde.";
+    private static readonly System.Diagnostics.Metrics.Meter SecurityMeter = new("PortalSubastas.Security");
+    private static readonly System.Diagnostics.Metrics.Counter<long> LoginFailedCounter =
+        SecurityMeter.CreateCounter<long>("auth.login.failed");
+    private static readonly System.Diagnostics.Metrics.Counter<long> LockoutCounter =
+        SecurityMeter.CreateCounter<long>("auth.lockout");
+
     private readonly PortalSubastasContext _identityContext;
     private readonly IConfiguration _configuration;
     private readonly IPublishEndpoint _publishEndpoint;
@@ -25,21 +33,42 @@ public class AuthService : BaseService, IAuthService
 
     public async Task<OperationResponse<LoginResponseDto>> LoginAsync(LoginRequestDto request)
     {
+        var email = NormalizeLoginIdentifier(request.Email);
+        var clientIp = GetClientIp();
+
+        if (IsLoginLocked(email, clientIp))
+        {
+            LockoutCounter.Add(1,
+                new KeyValuePair<string, object?>("scope", "active"),
+                new KeyValuePair<string, object?>("reason", "LOCKOUT_ACTIVE"));
+
+            await PublishSystemLogAsync(_publishEndpoint, "SECURITY_AUTH_LOCKOUT", "IAM", new
+            {
+                Email = MaskLoginIdentifier(email),
+                Ip = clientIp,
+                Reason = "LOCKOUT_ACTIVE"
+            });
+
+            return OperationResponse<LoginResponseDto>.CustomErrorResponse(429, LoginLockoutMessage);
+        }
+
         var usuario = await _identityContext.TUsuarios
             .Include(u => u.IdPersonaNavigation).ThenInclude(p => p.TProveedoresRepresentantes).ThenInclude(pr => pr.IdProveedorNavigation)
             .Include(u => u.TJurisdiccionesUsuarios).ThenInclude(j => j.IdOrganizacionNavigation)
             .Include(u => u.IdRolNavigation)
             .Include(u => u.IdEstadoNavigation)
-            .FirstOrDefaultAsync(u => u.EmailLogin == request.Email);
+            .FirstOrDefaultAsync(u => u.EmailLogin.ToLower() == email);
 
         if (usuario == null)
-            return Unauthorized<LoginResponseDto>("Credenciales incorrectas.");
+            return await RejectFailedLoginAsync(email, clientIp, "USER_NOT_FOUND");
 
         if (usuario.IdEstadoNavigation.Descripcion != "ACTIVO")
-            return Unauthorized<LoginResponseDto>("El usuario se encuentra inactivo o bloqueado.");
+            return await RejectFailedLoginAsync(email, clientIp, "USER_NOT_ACTIVE");
 
         if (!BC.Verify(request.Password, usuario.PasswordHash))
-            return Unauthorized<LoginResponseDto>("Credenciales incorrectas.");
+            return await RejectFailedLoginAsync(email, clientIp, "INVALID_PASSWORD");
+
+        ResetLoginFailureState(email, clientIp);
 
         var modulosPermitidos = await _identityContext.TRolesModulos
             .Include(rm => rm.IdModuloNavigation)
@@ -618,14 +647,14 @@ public class AuthService : BaseService, IAuthService
             return BadRequest<bool>("Solicitud de recuperación inválida.");
 
         if (usuario.IdEstadoNavigation.Descripcion != "ACTIVO")
-            return BadRequest<bool>("La cuenta no está activa.");
+            return BadRequest<bool>("Solicitud de recuperación inválida.");
 
         if (usuario.CodigoConfirmacion != request.Codigo)
-            return BadRequest<bool>("El código de recuperación es incorrecto.");
+            return BadRequest<bool>("Solicitud de recuperación inválida.");
 
         if (usuario.FechaEnvioCodigo.HasValue &&
             DateTime.UtcNow > usuario.FechaEnvioCodigo.Value.AddMinutes(30))
-            return BadRequest<bool>("El código expiró. Solicitá uno nuevo.");
+            return BadRequest<bool>("Solicitud de recuperación inválida.");
 
         usuario.PasswordHash = BC.HashPassword(request.NuevaPassword);
         usuario.CodigoConfirmacion = null;
@@ -648,6 +677,124 @@ public class AuthService : BaseService, IAuthService
                              && !string.IsNullOrWhiteSpace(_configuration["Resend:ApiKey"]);
 
         return isDevelopment && !hasEmailConfig;
+    }
+
+    private async Task<OperationResponse<LoginResponseDto>> RejectFailedLoginAsync(string email, string clientIp, string reason)
+    {
+        var lockoutTriggered = RegisterFailedLogin(email, clientIp);
+        LoginFailedCounter.Add(1, new KeyValuePair<string, object?>("reason", reason));
+
+        if (lockoutTriggered)
+        {
+            LockoutCounter.Add(1,
+                new KeyValuePair<string, object?>("scope", "triggered"),
+                new KeyValuePair<string, object?>("reason", reason));
+        }
+
+        await PublishSystemLogAsync(_publishEndpoint, lockoutTriggered ? "SECURITY_AUTH_LOCKOUT" : "SECURITY_AUTH_FAILURE", "IAM", new
+        {
+            Email = MaskLoginIdentifier(email),
+            Ip = clientIp,
+            Reason = reason,
+            LockoutTriggered = lockoutTriggered
+        });
+
+        return lockoutTriggered
+            ? OperationResponse<LoginResponseDto>.CustomErrorResponse(429, LoginLockoutMessage)
+            : Unauthorized<LoginResponseDto>(InvalidLoginMessage);
+    }
+
+    private bool IsLoginLocked(string email, string clientIp)
+    {
+        return HasActiveLockout(LoginLockKey("email", email)) ||
+               HasActiveLockout(LoginLockKey("ip", clientIp)) ||
+               HasActiveLockout(LoginLockKey("ip-email", $"{clientIp}:{email}"));
+    }
+
+    private bool RegisterFailedLogin(string email, string clientIp)
+    {
+        var window = TimeSpan.FromMinutes(GetSecurityAuthInt("FailureWindowMinutes", 15));
+        var lockout = TimeSpan.FromMinutes(GetSecurityAuthInt("LockoutMinutes", 15));
+        var emailLimit = GetSecurityAuthInt("MaxFailedAttemptsByEmail", GetSecurityAuthInt("MaxFailedLoginAttempts", 5));
+        var ipLimit = GetSecurityAuthInt("MaxFailedAttemptsByIp", 40);
+        var comboLimit = GetSecurityAuthInt("MaxFailedAttemptsByIpEmail", emailLimit);
+
+        var lockedByEmail = IncrementLoginFailure(LoginCounterKey("email", email), LoginLockKey("email", email), emailLimit, window, lockout);
+        var lockedByIp = IncrementLoginFailure(LoginCounterKey("ip", clientIp), LoginLockKey("ip", clientIp), ipLimit, window, lockout);
+        var lockedByCombo = IncrementLoginFailure(LoginCounterKey("ip-email", $"{clientIp}:{email}"), LoginLockKey("ip-email", $"{clientIp}:{email}"), comboLimit, window, lockout);
+
+        return lockedByEmail || lockedByIp || lockedByCombo;
+    }
+
+    private bool IncrementLoginFailure(string counterKey, string lockKey, int permitLimit, TimeSpan window, TimeSpan lockout)
+    {
+        _cache.TryGetValue<int>(counterKey, out var current);
+        var next = current + 1;
+        _cache.Set(counterKey, next, window);
+
+        if (next < permitLimit)
+        {
+            return false;
+        }
+
+        _cache.Set(lockKey, DateTimeOffset.UtcNow.Add(lockout), lockout);
+        return true;
+    }
+
+    private void ResetLoginFailureState(string email, string clientIp)
+    {
+        _cache.Remove(LoginCounterKey("email", email));
+        _cache.Remove(LoginCounterKey("ip-email", $"{clientIp}:{email}"));
+        _cache.Remove(LoginLockKey("email", email));
+        _cache.Remove(LoginLockKey("ip-email", $"{clientIp}:{email}"));
+    }
+
+    private bool HasActiveLockout(string lockKey)
+    {
+        return _cache.TryGetValue<DateTimeOffset>(lockKey, out var lockoutUntil) &&
+               lockoutUntil > DateTimeOffset.UtcNow;
+    }
+
+    private int GetSecurityAuthInt(string key, int fallback)
+    {
+        var value = _configuration.GetValue<int?>($"Security:Auth:{key}");
+        return value.HasValue && value.Value > 0 ? value.Value : fallback;
+    }
+
+    private string GetClientIp()
+    {
+        var httpContext = _httpContextAccessor?.HttpContext;
+        var forwarded = httpContext?.Request.Headers["CF-Connecting-IP"].FirstOrDefault()
+                        ?? httpContext?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',').FirstOrDefault()?.Trim();
+
+        return !string.IsNullOrWhiteSpace(forwarded)
+            ? forwarded
+            : httpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    }
+
+    private static string NormalizeLoginIdentifier(string? value)
+        => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
+
+    private static string LoginCounterKey(string scope, string value)
+        => $"security:auth:failed:{scope}:{value}";
+
+    private static string LoginLockKey(string scope, string value)
+        => $"security:auth:lockout:{scope}:{value}";
+
+    private static string MaskLoginIdentifier(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "unknown";
+        }
+
+        var atIndex = value.IndexOf('@');
+        if (atIndex <= 1)
+        {
+            return $"***{(atIndex >= 0 ? value[atIndex..] : string.Empty)}";
+        }
+
+        return $"{value[..Math.Min(2, atIndex)]}***{value[atIndex..]}";
     }
 
     private static string GenerarCodigoConfirmacion()

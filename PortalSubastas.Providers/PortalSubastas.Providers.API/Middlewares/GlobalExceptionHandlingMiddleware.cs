@@ -28,12 +28,15 @@ public class GlobalExceptionHandlingMiddleware
     {
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? context.TraceIdentifier;
+        context.Response.Headers["X-Correlation-ID"] = correlationId;
 
         var response = new
         {
             success = false,
             message = "Error interno del servidor.",
-            code = 500
+            code = 500,
+            correlationId
         };
 
         await context.Response.WriteAsJsonAsync(response);

@@ -73,7 +73,7 @@ public class GarantiaService : BaseService, IGarantiaService
             MontoPagare = dto.MontoPagare,
             FechaPagare = dto.FechaPagare.HasValue ? DateOnly.FromDateTime(dto.FechaPagare.Value) : null,
             Observacion = dto.Observacion,
-            NombreArchivo = dto.Archivo.FileName,
+            NombreArchivo = Path.GetFileName(dto.Archivo.FileName),
             UrlArchivo = urlArchivo
         };
 

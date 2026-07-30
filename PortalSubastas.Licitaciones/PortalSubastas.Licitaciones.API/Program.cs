@@ -32,6 +32,7 @@ builder.Services.AddHostedService<PortalSubastas.Licitaciones.API.Services.Subas
 
 var app = builder.Build();
 
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
 app.UseOpenTelemetry();
@@ -53,6 +54,28 @@ app.MapControllers();
 app.MapHub<SubastaHub>("/signalr/subastas");
 
 app.MapHealthChecks("/health");
+app.MapGet("/health/ready", async (PortalSubastasContext db, IConfiguration configuration, CancellationToken cancellationToken) =>
+{
+    var dbOk = await db.Database.CanConnectAsync(cancellationToken);
+    var rabbitOk = !string.IsNullOrWhiteSpace(configuration["RabbitMq:Host"]) &&
+                   !string.IsNullOrWhiteSpace(configuration["RabbitMq:Username"]) &&
+                   !string.IsNullOrWhiteSpace(configuration["RabbitMq:Password"]);
+    var storageOk = !string.IsNullOrWhiteSpace(configuration["CloudflareR2:BucketName"]);
+
+    var payload = new
+    {
+        status = dbOk && rabbitOk && storageOk ? "Healthy" : "Degraded",
+        checks = new
+        {
+            database = dbOk ? "Healthy" : "Unhealthy",
+            rabbitMq = rabbitOk ? "Configured" : "Missing configuration",
+            storage = storageOk ? "Configured" : "Missing configuration"
+        },
+        timestamp = DateTimeOffset.UtcNow
+    };
+
+    return Results.Json(payload, statusCode: dbOk && rabbitOk && storageOk ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
 
 app.Run();
 

@@ -177,18 +177,51 @@ public abstract class BaseService
     {
         var userId = GetCurrentUserIdGuid();
         var username = GetCurrentUsername();
-        var ipAddress = _httpContextAccessor?.HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "Desconocida";
+        var ipAddress = GetRequestIpAddress();
 
         var logEvent = new SystemLogEvent(
             UserId: userId,
             Username: username,
             Action: action,
             Module: module,
-            Details: JsonSerializer.Serialize(details),
+            Details: JsonSerializer.Serialize(BuildSystemLogDetails(details)),
             IpAddress: ipAddress,
             OccurredAt: TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires"))
         );
 
         await publishEndpoint.Publish(logEvent);
+    }
+
+    private object BuildSystemLogDetails(object details)
+    {
+        var httpContext = _httpContextAccessor?.HttpContext;
+
+        return new
+        {
+            Payload = details,
+            CorrelationId = GetCorrelationId(),
+            UserAgent = httpContext?.Request.Headers.UserAgent.FirstOrDefault(),
+            Method = httpContext?.Request.Method,
+            Path = httpContext?.Request.Path.Value
+        };
+    }
+
+    private string GetRequestIpAddress()
+    {
+        var httpContext = _httpContextAccessor?.HttpContext;
+        var forwarded = httpContext?.Request.Headers["CF-Connecting-IP"].FirstOrDefault()
+                        ?? httpContext?.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',').FirstOrDefault()?.Trim();
+
+        return !string.IsNullOrWhiteSpace(forwarded)
+            ? forwarded
+            : httpContext?.Connection.RemoteIpAddress?.ToString() ?? "Desconocida";
+    }
+
+    private string GetCorrelationId()
+    {
+        var httpContext = _httpContextAccessor?.HttpContext;
+        return httpContext?.Request.Headers["X-Correlation-ID"].FirstOrDefault()
+               ?? httpContext?.TraceIdentifier
+               ?? string.Empty;
     }
 }

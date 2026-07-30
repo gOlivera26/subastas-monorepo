@@ -86,7 +86,7 @@ public class DocumentoItemService : BaseService, IDocumentoItemService
             IdCotizacionDetalle = request.IdCotizacionDetalle,
             IdRenglon = request.IdRenglon,
             IdProveedor = idProveedor.Value,
-            NombreArchivo = request.Archivo.FileName,
+            NombreArchivo = Path.GetFileName(request.Archivo.FileName),
             UrlArchivo = urlArchivo,
             Enviado = false
         };

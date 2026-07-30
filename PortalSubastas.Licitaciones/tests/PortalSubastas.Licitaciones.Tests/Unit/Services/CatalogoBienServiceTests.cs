@@ -1,7 +1,7 @@
 using AutoMapper;
+using MassTransit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using PortalSubastas.Licitaciones.Application.AutoMapper;
@@ -133,12 +133,14 @@ public class ReservaDetalleServiceTests
 {
     private readonly Mock<IMapper> _mapperMock;
     private readonly Mock<IHttpContextAccessor> _httpContextMock;
+    private readonly Mock<IPublishEndpoint> _publishEndpointMock;
     private readonly MemoryCache _realCache;
 
     public ReservaDetalleServiceTests()
     {
         _mapperMock = new Mock<IMapper>();
         _httpContextMock = new Mock<IHttpContextAccessor>();
+        _publishEndpointMock = new Mock<IPublishEndpoint>();
         _realCache = new MemoryCache(new MemoryCacheOptions());
     }
 
@@ -150,7 +152,7 @@ public class ReservaDetalleServiceTests
             .Options;
 
         await using var context = new PortalSubastasContext(options);
-        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache);
+        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache, _publishEndpointMock.Object);
 
         var dto = new ReservaDetalleRequestDto { IdReserva = 999, IdItem = 10 };
 
@@ -181,7 +183,7 @@ public class ReservaDetalleServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache);
+        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache, _publishEndpointMock.Object);
         var dto = new ReservaDetalleRequestDto { IdReserva = 5, IdItem = 10 };
 
         var result = await service.CreateAsync(dto);
@@ -218,7 +220,7 @@ public class ReservaDetalleServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache);
+        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache, _publishEndpointMock.Object);
         var dto = new ReservaDetalleRequestDto { IdReserva = 5, IdItem = 10, Cantidad = 5, Importe = 1200 };
 
         var result = await service.UpdateAsync(3, dto);
@@ -255,7 +257,7 @@ public class ReservaDetalleServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache);
+        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache, _publishEndpointMock.Object);
 
         var result = await service.DeleteAsync(3);
 

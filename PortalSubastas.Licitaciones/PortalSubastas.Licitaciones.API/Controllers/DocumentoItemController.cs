@@ -4,6 +4,7 @@ using PortalSubastas.Licitaciones.Application.RequestDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Cotizacion;
 using PortalSubastas.Licitaciones.Application.Services.Interfaces;
+using PortalSubastas.Licitaciones.API.Security;
 
 namespace PortalSubastas.Licitaciones.API.Controllers;
 
@@ -13,10 +14,12 @@ namespace PortalSubastas.Licitaciones.API.Controllers;
 public class DocumentoItemController : BaseController
 {
     private readonly IDocumentoItemService _service;
+    private readonly IConfiguration _configuration;
 
-    public DocumentoItemController(IDocumentoItemService service)
+    public DocumentoItemController(IDocumentoItemService service, IConfiguration configuration)
     {
         _service = service;
+        _configuration = configuration;
     }
 
     [HttpGet]
@@ -28,9 +31,14 @@ public class DocumentoItemController : BaseController
     }
 
     [HttpPost]
+    [RequestSizeLimit(UploadSecurityPolicy.MaxDocumentBytes)]
     [ProducesResponseType(typeof(OperationResponse<DocumentoItemResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create(int idCotizacion, [FromForm] DocumentoItemRequestDto request)
     {
+        var validationError = await UploadSecurityPolicy.ValidateDocumentAsync(request.Archivo, _configuration);
+        if (validationError is not null)
+            return Return(OperationResponse<DocumentoItemResponseDto>.BadRequestResponse(validationError));
+
         request.IdCotizacion = idCotizacion;
         var result = await _service.UploadAsync(request);
         return Return(result);

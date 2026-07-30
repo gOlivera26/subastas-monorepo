@@ -9,10 +9,13 @@ public static class ServicesConfig
 {
     public static void AddConfig(this IServiceCollection services, IConfiguration configuration)
     {
+        ValidateProductionSecurityConfiguration(configuration);
+
         services.AddHttpContextAccessor();
         services.AddMemoryCache();
 
         var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+        var isDevelopment = IsDevelopment();
 
         services.AddCors(options =>
         {
@@ -25,12 +28,16 @@ public static class ServicesConfig
                            .AllowAnyHeader()
                            .AllowCredentials();
                 }
-                else
+                else if (isDevelopment)
                 {
                     builder.SetIsOriginAllowed(_ => true)
                            .AllowAnyMethod()
                            .AllowAnyHeader()
                            .AllowCredentials();
+                }
+                else
+                {
+                    builder.SetIsOriginAllowed(_ => false);
                 }
             });
         });
@@ -68,13 +75,18 @@ public static class ServicesConfig
 
     private static void AddJwt(this IServiceCollection services, IConfiguration configuration)
     {
+        var secretKey = GetJwtSecret(
+            configuration,
+            "YourSecretKeyHere12345",
+            "DevelopmentOnlyJwtSecretChangeMe_32Chars_Minimum!");
+
         _ = services.AddAuthentication(x =>
         {
             x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
             x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
         }).AddJwtBearer(options =>
         {
-            options.RequireHttpsMetadata = false;
+            options.RequireHttpsMetadata = !IsDevelopment();
             options.SaveToken = true;
             options.TokenValidationParameters = new TokenValidationParameters()
             {
@@ -85,8 +97,7 @@ public static class ServicesConfig
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = configuration["Jwt:Issuer"] ?? "PortalSubastas.Identity",
                 ValidAudience = configuration["Jwt:Audience"] ?? "PortalSubastas.Identity",
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(
-                    configuration["Jwt:SecretKey"] ?? "YourSecretKeyHere12345")),
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secretKey)),
                 ClockSkew = TimeSpan.Zero,
             };
 
@@ -172,5 +183,46 @@ public static class ServicesConfig
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)
     {
+    }
+
+    private static void ValidateProductionSecurityConfiguration(IConfiguration configuration)
+    {
+        if (IsDevelopment()) return;
+
+        var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+        if (allowedOrigins is null || allowedOrigins.Length == 0)
+        {
+            throw new InvalidOperationException("Security misconfiguration: Cors:AllowedOrigins is required outside Development.");
+        }
+
+        if (string.IsNullOrWhiteSpace(configuration.GetConnectionString("DefaultConnection")))
+        {
+            throw new InvalidOperationException("Security misconfiguration: ConnectionStrings:DefaultConnection is required outside Development.");
+        }
+    }
+
+    private static string GetJwtSecret(IConfiguration configuration, params string[] weakDefaults)
+    {
+        var secret = configuration["Jwt:SecretKey"];
+
+        if (!IsDevelopment())
+        {
+            if (string.IsNullOrWhiteSpace(secret) ||
+                secret.Length < 32 ||
+                weakDefaults.Contains(secret, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException("Security misconfiguration: Jwt:SecretKey must be strong and environment-provided outside Development.");
+            }
+        }
+
+        return secret ?? weakDefaults.First();
+    }
+
+    private static bool IsDevelopment()
+    {
+        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+                          ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT");
+
+        return string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase);
     }
 }

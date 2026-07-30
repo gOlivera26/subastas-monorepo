@@ -4,6 +4,7 @@ using PortalSubastas.Licitaciones.Application.RequestDto.Garantia;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Garantia;
 using PortalSubastas.Licitaciones.Application.Services.Interfaces;
+using PortalSubastas.Licitaciones.API.Security;
 
 namespace PortalSubastas.Licitaciones.API.Controllers;
 
@@ -13,10 +14,12 @@ namespace PortalSubastas.Licitaciones.API.Controllers;
 public class GarantiaController : BaseController
 {
     private readonly IGarantiaService _garantiaService;
+    private readonly IConfiguration _configuration;
 
-    public GarantiaController(IGarantiaService garantiaService)
+    public GarantiaController(IGarantiaService garantiaService, IConfiguration configuration)
     {
         _garantiaService = garantiaService;
+        _configuration = configuration;
     }
 
     [HttpGet("{idCotizacion:int}")]
@@ -31,9 +34,14 @@ public class GarantiaController : BaseController
     }
 
     [HttpPost]
+    [RequestSizeLimit(UploadSecurityPolicy.MaxDocumentBytes)]
     [ProducesResponseType(typeof(OperationResponse<GarantiaResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create([FromForm] GarantiaRequestDto request)
     {
+        var validationError = await UploadSecurityPolicy.ValidateDocumentAsync(request.Archivo, _configuration);
+        if (validationError is not null)
+            return Return(OperationResponse<GarantiaResponseDto>.BadRequestResponse(validationError));
+
         var result = await _garantiaService.CreateAsync(request);
         return Return(result);
     }

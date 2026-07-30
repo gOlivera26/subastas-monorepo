@@ -35,6 +35,7 @@ public static class OpenTelemetryConfig
                 .AddAspNetCoreInstrumentation()
                 .AddRuntimeInstrumentation()
                 .AddMeter("Microsoft.AspNetCore.Hosting", "Microsoft.AspNetCore.Server.Kestrel")
+                .AddMeter("PortalSubastas.Security")
                 .AddOtlpExporter(options =>
                 {
 
