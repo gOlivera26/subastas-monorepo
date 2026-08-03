@@ -54,19 +54,9 @@ public class UserService : BaseService, IUserService
 
         await _emailService.SendEmailAsync(
             usuario.EmailLogin,
-            "Tu cuenta fue aprobada — Innovanow",
-            $@"
-                <h2>¡Bienvenido a Owen Subastas!</h2>
-                <p>Tu cuenta fue aprobada. Ya podés ingresar al sistema con tu email y contraseña.</p>
-                <p>
-                    <a href='{_configuration["Frontend:Url"]}/auth/login'
-                       style='display:inline-block;padding:12px 24px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;'>
-                        Ir al inicio de sesión
-                    </a>
-                </p>
-                <hr>
-                <small>Innovanow — Portal de Subastas</small>
-            ");
+            "Tu cuenta fue aprobada — OWEN",
+            EmailTemplateHelper.GetCuentaAprobadaEmail("https://portal-subastas-subastas-front.lgpr0o.easypanel.host/login")
+        );
 
         await PublishSystemLogAsync(_publishEndpoint, "USUARIO_APROBADO", "IAM",
             new { Mensaje = $"Cuenta aprobada el {usuario.FechaAprobacion?.ToLocalTime():dd/MM/yyyy HH:mm}" });

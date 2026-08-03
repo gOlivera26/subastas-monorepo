@@ -7,8 +7,10 @@ public class ProviderListDto
     public string Cuit { get; set; } = string.Empty;
     public string Cup { get; set; } = string.Empty;
     public string EmailInstitucional { get; set; } = string.Empty;
+    public int IdTipoPersona { get; set; }
     public string TipoPersona { get; set; } = string.Empty;
     public bool HasConstanciaAfip { get; set; }
+    public string? UrlConstanciaAfip { get; set; }
     public int RubrosCount { get; set; }
     public int DomiciliosCount { get; set; }
 }

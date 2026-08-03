@@ -10,6 +10,7 @@ public class LoginResponseDto
     public List<ModuloDto> Modulos { get; set; } = new();
     public List<PaginaDto> Paginas { get; set; } = new();
     public List<EntidadDto> Entidades { get; set; } = new();
+    public string? CodigoConfirmacionDesarrollo { get; set; }
 }
 
 // NUEVA CLASE

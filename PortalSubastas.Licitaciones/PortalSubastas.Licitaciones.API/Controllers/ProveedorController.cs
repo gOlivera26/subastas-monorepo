@@ -15,20 +15,17 @@ public class ProveedorController : ControllerBase
 {
     private readonly PortalSubastasContext _context;
     private readonly IHttpContextAccessor _http;
-    private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<ProveedorController> _logger;
     private readonly IProveedorService _proveedorService;
 
     public ProveedorController(
         PortalSubastasContext context,
         IHttpContextAccessor http,
-        IPublishEndpoint publishEndpoint,
         ILogger<ProveedorController> logger,
         IProveedorService proveedorService)
     {
         _context = context;
         _http = http;
-        _publishEndpoint = publishEndpoint;
         _logger = logger;
         _proveedorService = proveedorService;
     }

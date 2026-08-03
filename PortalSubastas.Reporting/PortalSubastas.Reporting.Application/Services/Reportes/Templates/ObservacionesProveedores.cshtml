@@ -1,0 +1,87 @@
+@model PortalSubastas.Reporting.Domain.Models.ObservacionesProveedoresReport
+@{
+    var culture = new System.Globalization.CultureInfo("es-AR");
+    var fechaEmision = Model.Cabecera.FechaEmision.ToOffset(TimeSpan.FromHours(-3)).ToString("dd/MM/yyyy HH:mm", culture);
+    string ValueOrDash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+    string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd/MM/yyyy HH:mm", culture) : "-";
+}
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Observaciones @Model.Cabecera.NumeroCotizacion</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { color: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 11px; margin: 0; }
+        .page { padding: 24px 28px; }
+        header { border-bottom: 2px solid #111827; margin-bottom: 16px; padding-bottom: 10px; }
+        .brand { color: #6b7280; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+        h1 { font-size: 20px; margin: 6px 0 4px; }
+        .subtitle { color: #4b5563; }
+        .grid { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); margin: 14px 0; }
+        .card { border: 1px solid #d1d5db; border-radius: 5px; padding: 8px; }
+        .label { color: #6b7280; display: block; font-size: 9px; margin-bottom: 3px; text-transform: uppercase; }
+        .value { font-weight: 700; }
+        table { border-collapse: collapse; margin-top: 14px; page-break-inside: auto; width: 100%; }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        th, td { border: 1px solid #d1d5db; padding: 6px; text-align: left; vertical-align: top; }
+        th { background: #f3f4f6; font-size: 9px; text-transform: uppercase; }
+        .number { text-align: right; white-space: nowrap; }
+        .empty { border: 1px dashed #d1d5db; color: #6b7280; margin-top: 14px; padding: 8px; }
+    </style>
+</head>
+<body>
+<main class="page">
+    <header>
+        <div class="brand">Portal Subastas · Reportería</div>
+        <h1>Observaciones realizadas por proveedores</h1>
+        <div class="subtitle">@Model.Cabecera.Titulo</div>
+    </header>
+
+    <section class="grid">
+        <div class="card"><span class="label">Cotización</span><span class="value">@Model.Cabecera.NumeroCotizacion</span></div>
+        <div class="card"><span class="label">Estado</span><span class="value">@Model.Cabecera.Estado</span></div>
+        <div class="card"><span class="label">Tipo</span><span class="value">@Model.Cabecera.TipoContratacion</span></div>
+        <div class="card"><span class="label">Unidad administrativa</span><span class="value">@Model.Cabecera.UnidadAdministrativa</span></div>
+        <div class="card"><span class="label">Expediente</span><span class="value">@ValueOrDash(Model.Cabecera.NumeroExpediente)</span></div>
+        <div class="card"><span class="label">Límite impugnación</span><span class="value">@FormatDate(Model.Cabecera.FechaLimiteImpugnar)</span></div>
+        <div class="card"><span class="label">Emitido</span><span class="value">@fechaEmision</span></div>
+    </section>
+
+    @if (!Model.Observaciones.Any())
+    {
+        <div class="empty">No hay observaciones disponibles para esta cotización.</div>
+    }
+    else
+    {
+        <table>
+            <thead>
+            <tr>
+                <th class="number">#</th>
+                <th>Proveedor / origen</th>
+                <th>CUIT</th>
+                <th>Origen</th>
+                <th>Observación</th>
+            </tr>
+            </thead>
+            <tbody>
+            @{
+                var index = 1;
+            }
+            @foreach (var observacion in Model.Observaciones)
+            {
+                <tr>
+                    <td class="number">@index</td>
+                    <td>@observacion.Proveedor</td>
+                    <td>@ValueOrDash(observacion.Cuit)</td>
+                    <td>@observacion.Origen</td>
+                    <td>@observacion.Observacion</td>
+                </tr>
+                index++;
+            }
+            </tbody>
+        </table>
+    }
+</main>
+</body>
+</html>

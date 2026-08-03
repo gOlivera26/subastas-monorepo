@@ -9,4 +9,5 @@ public interface IRubroService
     Task<OperationResponse<List<RubroTreeDto>>> GetRubroTreeAsync();
     Task<OperationResponse<List<RubroTreeDto>>> GetRubroChildrenAsync(int parentId);
     Task<OperationResponse<List<RubroSearchResultDto>>> SearchRubrosAsync(string query);
+    Task<OperationResponse<RubroBulkUploadResultDto>> BulkUploadRubrosAsync(Stream fileStream);
 }

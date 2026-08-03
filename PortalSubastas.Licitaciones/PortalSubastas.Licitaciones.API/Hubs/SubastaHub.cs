@@ -19,6 +19,12 @@ public class SubastaHub : Hub
     {
         await ValidarAccesoPrivadoAsync(idCotizacion);
         await Groups.AddToGroupAsync(Context.ConnectionId, $"subasta_{idCotizacion}");
+
+        var strIdProveedor = Context.User?.FindFirst("IdProveedor")?.Value;
+        if (int.TryParse(strIdProveedor, out int idProveedor) && idProveedor > 0)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"subasta_{idCotizacion}_proveedor_{idProveedor}");
+        }
     }
 
     public async Task SalirSubasta(int idCotizacion)

@@ -15,6 +15,7 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
     private new readonly PortalSubastasContext _context;
     private readonly ISubastaNotificationService _notificationService;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IProviderLookupService _providerLookupService;
 
     public OfertaSubastaService(
         PortalSubastasContext context,
@@ -22,12 +23,14 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
         IHttpContextAccessor httpContextAccessor,
         IMemoryCache cache,
         ISubastaNotificationService notificationService,
-        IPublishEndpoint publishEndpoint)
+        IPublishEndpoint publishEndpoint,
+        IProviderLookupService providerLookupService)
         : base(context, mapper, httpContextAccessor, cache)
     {
         _context = context;
         _notificationService = notificationService;
         _publishEndpoint = publishEndpoint;
+        _providerLookupService = providerLookupService;
     }
 
     public async Task<OperationResponse<List<OfertaItemResponseDto>>> ProcesarOfertasAsync(int idCotizacion, List<OfertaItemRequestDto> ofertas)
@@ -53,12 +56,18 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
         if (ahora > cotizacion.Especificacion?.FechaFinalizacionSubasta)
             return BadRequest<List<OfertaItemResponseDto>>("La subasta ya ha finalizado.");
 
-        bool tieneGarantia = await _context.TGarantiasSubastas
-            .AnyAsync(g => g.IdCotizacion == idCotizacion && g.IdProveedor == idProveedor.Value && g.FecBaja == null);
+        var requiereGarantia = cotizacion.IdTipoContratacion == 8
+            || cotizacion.Especificacion?.GestionDocumentacion == true;
 
-        if (!tieneGarantia)
+        if (requiereGarantia)
         {
-            return BadRequest<List<OfertaItemResponseDto>>("Para poder ofertar debe subir la garantía y/o pagaré correspondiente.");
+            bool tieneGarantia = await _context.TGarantiasSubastas
+                .AnyAsync(g => g.IdCotizacion == idCotizacion && g.IdProveedor == idProveedor.Value && g.FecBaja == null);
+
+            if (!tieneGarantia)
+            {
+                return BadRequest<List<OfertaItemResponseDto>>("Para poder ofertar debe subir la garantía y/o pagaré correspondiente.");
+            }
         }
 
         var detallesIds = cotizacion.Detalles.Select(d => d.IdReservaDetalle).ToList();
@@ -243,9 +252,49 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
                 var res = resultados.First(r => r.IdCotizacionDetalle == ov.IdCotizacionDetalle && r.IdRenglon == ov.IdRenglon);
                 res.IdOfertaSubasta = ov.IdOfertaSubasta;
 
+                var proveedores = await _providerLookupService.GetByIdsAsync(new[] { ov.IdProveedor });
+                proveedores.TryGetValue(ov.IdProveedor, out var proveedorInfo);
+
                 await _notificationService.NotificarNuevaOfertaAsync(
-                    idCotizacion, ov.IdOfertaSubasta, ov.IdCotizacionDetalle, ov.IdRenglon, ov.Monto, ov.IdProveedor, ov.FechaOferta
+                    idCotizacion,
+                    ov.IdOfertaSubasta,
+                    ov.IdCotizacionDetalle,
+                    ov.IdRenglon,
+                    ov.Monto,
+                    ov.IdProveedor,
+                    ov.FechaOferta,
+                    proveedorInfo?.RazonSocial,
+                    ov.UsrIng
                 );
+            }
+
+            // 4. Notificar mejores ofertas anónimas a todos
+            var itemsAfectados = ofertasValidas
+                .Select(ov => new { ov.IdCotizacionDetalle, ov.IdRenglon })
+                .Distinct()
+                .ToList();
+
+            foreach (var item in itemsAfectados)
+            {
+                decimal? mejorMonto;
+                if (item.IdRenglon.HasValue)
+                {
+                    mejorMonto = await _context.TOfertasSubastas
+                        .Where(o => o.IdCotizacion == idCotizacion && o.IdRenglon == item.IdRenglon)
+                        .MinAsync(o => (decimal?)o.Monto);
+                }
+                else
+                {
+                    mejorMonto = await _context.TOfertasSubastas
+                        .Where(o => o.IdCotizacion == idCotizacion && o.IdCotizacionDetalle == item.IdCotizacionDetalle)
+                        .MinAsync(o => (decimal?)o.Monto);
+                }
+
+                if (mejorMonto.HasValue)
+                {
+                    await _notificationService.NotificarMejorOfertaActualizadaAsync(
+                        idCotizacion, item.IdCotizacionDetalle, item.IdRenglon, mejorMonto.Value);
+                }
             }
 
             if (subastaCerradaPorTope)
@@ -269,22 +318,56 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
 
     public async Task<OperationResponse<object>> GetHistorialAsync(int idCotizacion)
     {
+        var idProveedor = GetUserProveedorId();
+        var esAdmin = IsSuperAdmin();
+
         var ofertas = await _context.TOfertasSubastas
             .Where(o => o.IdCotizacion == idCotizacion)
             .OrderBy(o => o.Monto)
             .ThenBy(o => o.FechaOferta)
-            .Select(o => new
-            {
-                o.IdOfertaSubasta,
-                o.IdProveedor,
-                o.IdCotizacionDetalle,
-                o.IdRenglon,
-                o.Monto,
-                FechaOferta = o.FechaOferta.ToString("yyyy-MM-ddTHH:mm:ss")
-            })
+            .ThenBy(o => o.IdOfertaSubasta)
             .ToListAsync();
 
-        return Ok<object>(ofertas);
+        var providers = await _providerLookupService.GetByIdsAsync(ofertas.Select(o => o.IdProveedor));
+
+        var ofertasPropias = ofertas
+            .Select(o =>
+            {
+                providers.TryGetValue(o.IdProveedor, out var provider);
+
+                bool esPropia = idProveedor.HasValue && o.IdProveedor == idProveedor.Value;
+                bool puedeVerNombresReales = esAdmin || esPropia;
+
+                var proveedorReal = provider?.RazonSocial ?? $"Proveedor #{o.IdProveedor}";
+                var representanteReal = string.IsNullOrWhiteSpace(o.UsrIng) || o.UsrIng == "SISTEMA"
+                    ? null
+                    : o.UsrIng;
+
+                return new
+                {
+                    o.IdOfertaSubasta,
+                    o.IdProveedor,
+                    Proveedor = puedeVerNombresReales ? proveedorReal : "Proveedor Anónimo",
+                    Representante = puedeVerNombresReales ? representanteReal : null,
+                    Usuario = puedeVerNombresReales ? (representanteReal ?? proveedorReal) : "Proveedor Anónimo",
+                    o.IdCotizacionDetalle,
+                    o.IdRenglon,
+                    o.Monto,
+                    FechaOferta = o.FechaOferta.ToString("yyyy-MM-ddTHH:mm:ss")
+                };
+            }).ToList();
+
+        var mejoresOfertas = ofertas
+            .GroupBy(o => new { o.IdCotizacionDetalle, o.IdRenglon })
+            .Select(g => new
+            {
+                g.Key.IdCotizacionDetalle,
+                g.Key.IdRenglon,
+                MejorMonto = g.Min(o => (double)o.Monto)
+            })
+            .ToList();
+
+        return Ok<object>(new { ofertas = ofertasPropias, mejoresOfertas });
     }
 
     public async Task<OperationResponse<object>> GetMisOfertasAsync()

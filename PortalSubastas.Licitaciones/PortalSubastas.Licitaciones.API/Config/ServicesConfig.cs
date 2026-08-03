@@ -59,6 +59,12 @@ public static class ServicesConfig
 
         services.AddInternalServices();
 
+        services.AddHttpClient<IProviderLookupService, ProviderLookupService>(client =>
+        {
+            var baseUrl = configuration["Services:Providers:BaseUrl"] ?? "http://providers:8080";
+            client.BaseAddress = new Uri(baseUrl);
+        });
+
         services.AddControllers();
 
         services.AddAuthorizationBuilder()
@@ -182,6 +188,7 @@ public static class ServicesConfig
         services.AddScoped<IDocumentoItemService, DocumentoItemService>();
         services.AddScoped<IProveedorRepresentanteService, ProveedorRepresentanteService>();
         services.AddScoped<IProveedorService, ProveedorService>();
+        services.AddScoped<ITableroService, TableroService>();
     }
 
     private static void BindAppSettings(this IServiceCollection services, IConfiguration configuration)

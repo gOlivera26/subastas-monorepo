@@ -57,4 +57,11 @@ public class DomicilioController : BaseController
         var result = await _catalogoService.GetProvinciasAsync();
         return Return(result);
     }
+
+    [HttpGet("tipos-persona")]
+    public async Task<IActionResult> GetTiposPersona()
+    {
+        var result = await _catalogoService.GetTiposPersonaAsync();
+        return Return(result);
+    }
 }

@@ -24,6 +24,7 @@ public partial class TCotizacionEspecificacion : IFullAuditableEntity
     public DateTime? FechaAperturaSobreUno { get; set; }
     public DateTime? FechaAperturaSobreDos { get; set; }
     public bool MostrarBotonMejora { get; set; }
+    public bool GestionDocumentacion { get; set; }
 
     public string UsrIng { get; set; }
     public DateTime? FecIng { get; set; }

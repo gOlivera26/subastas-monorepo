@@ -1,0 +1,138 @@
+@model PortalSubastas.Reporting.Domain.Models.PreguntasRespuestasReport
+@{
+    var culture = new System.Globalization.CultureInfo("es-AR");
+    var fechaEmision = Model.Cabecera.FechaEmision.ToOffset(TimeSpan.FromHours(-3)).ToString("dd/MM/yyyy HH:mm", culture);
+    string ValueOrDash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+    string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd/MM/yyyy HH:mm", culture) : "-";
+}
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <title>Preguntas y respuestas @Model.Cabecera.NumeroCotizacion</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            color: #111827;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            margin: 0;
+        }
+        .page { padding: 24px 28px; }
+        header {
+            border-bottom: 2px solid #111827;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+        }
+        .brand {
+            color: #6b7280;
+            font-size: 10px;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        h1 { font-size: 20px; margin: 6px 0 4px; }
+        .subtitle { color: #4b5563; }
+        .grid {
+            display: grid;
+            gap: 8px;
+            grid-template-columns: repeat(3, 1fr);
+            margin: 14px 0;
+        }
+        .card {
+            border: 1px solid #d1d5db;
+            border-radius: 5px;
+            padding: 8px;
+        }
+        .label {
+            color: #6b7280;
+            display: block;
+            font-size: 9px;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+        }
+        .value { font-weight: 700; }
+        .consulta {
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            margin-top: 12px;
+            page-break-inside: avoid;
+        }
+        .consulta-header {
+            background: #f3f4f6;
+            border-bottom: 1px solid #d1d5db;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px;
+        }
+        .consulta-body { padding: 8px; }
+        .pregunta, .respuesta { margin-top: 8px; }
+        .text {
+            border-left: 3px solid #d1d5db;
+            margin-top: 4px;
+            padding: 6px 8px;
+            white-space: pre-wrap;
+        }
+        .respuesta .text { border-left-color: #10b981; }
+        .empty {
+            border: 1px dashed #d1d5db;
+            color: #6b7280;
+            margin-top: 14px;
+            padding: 8px;
+        }
+    </style>
+</head>
+<body>
+<main class="page">
+    <header>
+        <div class="brand">Portal Subastas · Reportería</div>
+        <h1>Preguntas y respuestas</h1>
+        <div class="subtitle">@Model.Cabecera.Titulo</div>
+    </header>
+
+    <section class="grid">
+        <div class="card"><span class="label">Cotización</span><span class="value">@Model.Cabecera.NumeroCotizacion</span></div>
+        <div class="card"><span class="label">Estado</span><span class="value">@Model.Cabecera.Estado</span></div>
+        <div class="card"><span class="label">Tipo</span><span class="value">@Model.Cabecera.TipoContratacion</span></div>
+        <div class="card"><span class="label">Unidad administrativa</span><span class="value">@Model.Cabecera.UnidadAdministrativa</span></div>
+        <div class="card"><span class="label">Expediente</span><span class="value">@ValueOrDash(Model.Cabecera.NumeroExpediente)</span></div>
+        <div class="card"><span class="label">Emitido</span><span class="value">@fechaEmision</span></div>
+    </section>
+
+    @if (!Model.Consultas.Any())
+    {
+        <div class="empty">No hay preguntas registradas para esta subasta.</div>
+    }
+    else
+    {
+        var index = 1;
+        foreach (var consulta in Model.Consultas)
+        {
+            <article class="consulta">
+                <div class="consulta-header">
+                    <strong>Consulta #@index</strong>
+                    <span>@FormatDate(consulta.FechaPregunta)</span>
+                </div>
+                <div class="consulta-body">
+                    <div><span class="label">Usuario pregunta</span><span class="value">@consulta.UsuarioPregunta</span></div>
+                    <section class="pregunta">
+                        <span class="label">Pregunta</span>
+                        <div class="text">@consulta.Pregunta</div>
+                    </section>
+                    <section class="respuesta">
+                        <span class="label">Respuesta</span>
+                        <div class="text">@ValueOrDash(consulta.Respuesta)</div>
+                        <div style="margin-top: 6px;">
+                            <span class="label">Respondida por</span>
+                            <span>@ValueOrDash(consulta.UsuarioRespuesta)</span>
+                            <span style="margin-left: 12px;">@FormatDate(consulta.FechaRespuesta)</span>
+                        </div>
+                    </section>
+                </div>
+            </article>
+            index++;
+        }
+    }
+</main>
+</body>
+</html>

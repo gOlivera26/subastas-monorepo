@@ -8,14 +8,14 @@ public class AuthService : BaseService, IAuthService
     private readonly IEmailService _emailService;
 
     public AuthService(
-    PortalSubastasContext context,
-    IConfiguration configuration,
-    IMapper mapper,
-    IHttpContextAccessor httpContextAccessor,
-    IMemoryCache cache,
-    IPublishEndpoint publishEndpoint,
-    IEmailService emailService)
-    : base(context, mapper, httpContextAccessor, cache)
+        PortalSubastasContext context,
+        IConfiguration configuration,
+        IMapper mapper,
+        IHttpContextAccessor httpContextAccessor,
+        IMemoryCache cache,
+        IPublishEndpoint publishEndpoint,
+        IEmailService emailService)
+        : base(context, mapper, httpContextAccessor, cache)
     {
         _identityContext = context;
         _configuration = configuration;
@@ -76,13 +76,8 @@ public class AuthService : BaseService, IAuthService
             .OrderBy(m => modulosPermitidos.Concat(modulosDesdePaginas).ToList().IndexOf(m))
             .ToList();
 
-        var entidades = new List<EntidadDto>();
-        foreach (var j in usuario.TJurisdiccionesUsuarios.Where(x => x.FecBaja == null))
-            entidades.Add(new EntidadDto { Id = j.IdOrganizacion, Tipo = "GESTOR", Nombre = j.IdOrganizacionNavigation.Nombre });
-        foreach (var p in usuario.IdPersonaNavigation.TProveedoresRepresentantes.Where(x => x.FecBaja == null))
-            entidades.Add(new EntidadDto { Id = p.IdProveedor, Tipo = "PROVEEDOR", Nombre = p.IdProveedorNavigation.RazonSocial });
-
-        var token = GenerarJwtToken(usuario); // Llama por defecto al primer contexto
+        var entidades = ObtenerEntidadesOperables(usuario);
+        var token = GenerarJwtToken(usuario);
 
         usuario.UltimoAcceso = DateTime.UtcNow;
         _identityContext.TUsuarios.Update(usuario);
@@ -127,7 +122,13 @@ public class AuthService : BaseService, IAuthService
 
         if (usuario == null) return NotFound<LoginResponseDto>();
 
-        // Validar que realmente pertenece a esa entidad
+        request.TipoEntidad = NormalizarTipoContexto(request.TipoEntidad);
+        if (!EsTipoContextoValido(request.TipoEntidad))
+            return BadRequest<LoginResponseDto>("El tipo de contexto solicitado no es válido.");
+
+        if (!RolPuedeOperarContexto(usuario.IdRolNavigation.Nombre, request.TipoEntidad))
+            return BadRequest<LoginResponseDto>("El rol del usuario no permite operar en este contexto.");
+
         if (request.TipoEntidad == "GESTOR")
         {
             var existe = await _identityContext.TJurisdiccionesUsuarios.AnyAsync(j => j.IdUsuario == userId && j.IdOrganizacion == request.IdEntidad && j.FecBaja == null);
@@ -157,6 +158,10 @@ public class AuthService : BaseService, IAuthService
 
     public async Task<OperationResponse<LoginResponseDto>> RegisterAsync(RegisterRequestDto request)
     {
+        var contextoRegistro = ObtenerTipoContextoRegistro(request);
+        if (contextoRegistro == null)
+            return BadRequest<LoginResponseDto>("Debe seleccionar una organización o un proveedor, pero no ambos.");
+
         var emailExiste = await _identityContext.TUsuarios.AnyAsync(u => u.EmailLogin == request.Email);
         if (emailExiste)
             return BadRequest<LoginResponseDto>("El correo electrónico ya se encuentra registrado.");
@@ -164,6 +169,43 @@ public class AuthService : BaseService, IAuthService
         var docExiste = await _identityContext.TPersonas.AnyAsync(p => p.NroDocumento == request.NroDocumento);
         if (docExiste)
             return BadRequest<LoginResponseDto>("El documento ya se encuentra registrado.");
+
+        var rol = await _identityContext.TRoles.FirstOrDefaultAsync(r => r.Id == request.IdRol);
+        if (rol == null)
+        {
+            rol = await ResolveRegistrationRoleAsync(request);
+            if (rol == null)
+                return BadRequest<LoginResponseDto>("El rol seleccionado no existe o no está activo.");
+        }
+
+        var idRolRegistro = rol.Id;
+
+        if (!RolPuedeOperarContexto(rol.Nombre, contextoRegistro))
+            return BadRequest<LoginResponseDto>("El rol seleccionado no corresponde al tipo de registro.");
+
+        var tipoPersonaExiste = await _identityContext.TTiposPersonas.AnyAsync(t => t.Id == request.IdTipoPersona);
+        if (!tipoPersonaExiste)
+            return BadRequest<LoginResponseDto>("El tipo de persona seleccionado no existe o no está activo.");
+
+        var tipoDocumentoExiste = await _identityContext.TTiposDocumentos.AnyAsync(t => t.Id == request.IdTipoDocumento);
+        if (!tipoDocumentoExiste)
+            return BadRequest<LoginResponseDto>("El tipo de documento seleccionado no existe o no está activo.");
+
+        if (contextoRegistro == "GESTOR")
+        {
+            var organizacionExiste = await _identityContext.TOrganizaciones
+                .AnyAsync(o => o.IdOrganizacion == request.IdOrganizacion!.Value && o.Activo == true);
+            if (!organizacionExiste)
+                return BadRequest<LoginResponseDto>("La organización seleccionada no existe o no está activa.");
+        }
+
+        if (contextoRegistro == "PROVEEDOR")
+        {
+            var proveedorExiste = await _identityContext.TProveedores
+                .AnyAsync(p => p.Id == request.IdProveedor!.Value);
+            if (!proveedorExiste)
+                return BadRequest<LoginResponseDto>("El proveedor seleccionado no existe o no está activo.");
+        }
 
         string? codigoConfirmacion = null;
 
@@ -188,7 +230,7 @@ public class AuthService : BaseService, IAuthService
             var usuario = new TUsuario
             {
                 IdPersona = persona.Id,
-                IdRol = request.IdRol,
+                IdRol = idRolRegistro,
                 IdEstado = 8, // PENDIENTE_CONFIRMACION
                 EmailLogin = request.Email,
                 PasswordHash = BC.HashPassword(request.Password),
@@ -201,22 +243,22 @@ public class AuthService : BaseService, IAuthService
             _identityContext.TUsuarios.Add(usuario);
             await _identityContext.SaveChangesAsync();
 
-            if (request.IdOrganizacion.HasValue)
+            if (contextoRegistro == "GESTOR")
             {
                 var jurisdiccion = new TJurisdiccionesUsuario
                 {
                     IdUsuario = usuario.Id,
-                    IdOrganizacion = request.IdOrganizacion.Value,
+                    IdOrganizacion = request.IdOrganizacion!.Value,
                     EsPrincipal = true
                 };
                 PrepareAuditableEntity(jurisdiccion, isNew: true);
                 _identityContext.TJurisdiccionesUsuarios.Add(jurisdiccion);
             }
-            else if (request.IdProveedor.HasValue)
+            else if (contextoRegistro == "PROVEEDOR")
             {
                 var representante = new TProveedoresRepresentante
                 {
-                    IdProveedor = request.IdProveedor.Value,
+                    IdProveedor = request.IdProveedor!.Value,
                     IdPersona = persona.Id,
                     EsApoderado = false
                 };
@@ -232,27 +274,53 @@ public class AuthService : BaseService, IAuthService
 
         await _emailService.SendEmailAsync(
             request.Email,
-            "Confirmá tu correo electrónico — Trasus Argentina",
-            $@"
-                <h2>Gracias por registrarte</h2>
-                <p>Tu código de confirmación es:</p>
-                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{codigoConfirmacion}</h1>
-                <p>Este código expira en 30 minutos.</p>
-                <p>Si no solicitaste este registro, ignorá este mensaje.</p>
-                <hr>
-                <small>Trasus Argentina — Portal de Subastas</small>
-            ");
+            "Confirmá tu correo electrónico — OWEN",
+            EmailTemplateHelper.GetCodigoVerificationEmail(
+                "Verificación de cuenta",
+                "Gracias por registrarte en la plataforma. Utilizá el siguiente código para confirmar tu correo:",
+                codigoConfirmacion!)
+        );
 
         await PublishSystemLogAsync(_publishEndpoint, "NUEVO_REGISTRO", "IAM",
-    new { Mensaje = $"Nuevo usuario registrado en el sistema: {request.Email} (Documento: {request.NroDocumento})" });
+            new { Mensaje = $"Nuevo usuario registrado en el sistema: {request.Email} (Documento: {request.NroDocumento})" });
 
         return Ok(new LoginResponseDto
         {
             NombreUsuario = $"{request.Nombre} {request.Apellido}",
             Email = request.Email,
-            Token = string.Empty
+            Token = string.Empty,
+            CodigoConfirmacionDesarrollo = ShouldExposeDevEmailCode() ? codigoConfirmacion : null
         });
     }
+
+    private async Task<TRole?> ResolveRegistrationRoleAsync(RegisterRequestDto request)
+    {
+        var roles = await _identityContext.TRoles.AsNoTracking().ToListAsync();
+
+        var contextoRegistro = ObtenerTipoContextoRegistro(request);
+
+        if (contextoRegistro == "GESTOR")
+        {
+            return roles.FirstOrDefault(r =>
+                RoleNameContains(r.Nombre, "GESTOR") ||
+                RoleNameContains(r.Nombre, "LICITACION") ||
+                RoleNameContains(r.Nombre, "LICITACIÓN") ||
+                RoleNameContains(r.Nombre, "INVERSA"));
+        }
+
+        if (contextoRegistro == "PROVEEDOR")
+        {
+            return roles.FirstOrDefault(r =>
+                RoleNameContains(r.Nombre, "PROVEEDOR") ||
+                RoleNameContains(r.Nombre, "DIRECTA"));
+        }
+
+        return null;
+    }
+
+    private static bool RoleNameContains(string? roleName, string value)
+        => !string.IsNullOrWhiteSpace(roleName) &&
+           roleName.Trim().ToUpperInvariant().Contains(value, StringComparison.OrdinalIgnoreCase);
 
     public async Task<OperationResponse<ProfileResponseDto>> GetProfileAsync()
     {
@@ -286,7 +354,7 @@ public class AuthService : BaseService, IAuthService
         await _identityContext.SaveChangesAsync();
 
         await PublishSystemLogAsync(_publishEndpoint, "CAMBIO_PASSWORD", "IAM",
-    new { Mensaje = $"El usuario {usuario.EmailLogin} modificó su contraseña personal." });
+            new { Mensaje = $"El usuario {usuario.EmailLogin} modificó su contraseña personal." });
 
         return Ok(true);
     }
@@ -303,9 +371,6 @@ public class AuthService : BaseService, IAuthService
 
         if (usuario == null) return NotFound<ProfileResponseDto>();
 
-        if (string.IsNullOrWhiteSpace(request.Nombre) || string.IsNullOrWhiteSpace(request.Apellido))
-            return BadRequest<ProfileResponseDto>("El nombre y el apellido son obligatorios.");
-
         usuario.IdPersonaNavigation.Nombre = request.Nombre;
         usuario.IdPersonaNavigation.Apellido = request.Apellido;
         usuario.IdPersonaNavigation.Telefono = request.Telefono;
@@ -316,7 +381,6 @@ public class AuthService : BaseService, IAuthService
 
         return Ok(_mapper.Map<ProfileResponseDto>(usuario));
     }
-
 
     private string GenerarJwtToken(TUsuario usuario, int? idOrganizacionContexto = null, int? idProveedorContexto = null)
     {
@@ -331,7 +395,6 @@ public class AuthService : BaseService, IAuthService
             new(ClaimTypes.Role, usuario.IdRolNavigation.Nombre)
         };
 
-        // LÓGICA DE CONTEXTO ESTRICTO (O uno, o el otro)
         if (idOrganizacionContexto.HasValue)
         {
             claims.Add(new Claim("IdOrganizacion", idOrganizacionContexto.Value.ToString()));
@@ -344,15 +407,19 @@ public class AuthService : BaseService, IAuthService
         }
         else
         {
-            var orgPrincipal = _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null && j.EsPrincipal == true)
-                            ?? _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null);
-
-            if (orgPrincipal != null)
+            if (RolPuedeOperarContexto(usuario.IdRolNavigation.Nombre, "GESTOR"))
             {
-                claims.Add(new Claim("IdOrganizacion", orgPrincipal.IdOrganizacion.ToString()));
-                claims.Add(new Claim("TipoContexto", "GESTOR"));
+                var orgPrincipal = _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null && j.EsPrincipal == true)
+                                ?? _identityContext.TJurisdiccionesUsuarios.FirstOrDefault(j => j.IdUsuario == usuario.Id && j.FecBaja == null);
+
+                if (orgPrincipal != null)
+                {
+                    claims.Add(new Claim("IdOrganizacion", orgPrincipal.IdOrganizacion.ToString()));
+                    claims.Add(new Claim("TipoContexto", "GESTOR"));
+                }
             }
-            else
+
+            if (!claims.Any(c => c.Type == "TipoContexto") && RolPuedeOperarContexto(usuario.IdRolNavigation.Nombre, "PROVEEDOR"))
             {
                 var proveedor = _identityContext.TProveedoresRepresentantes.FirstOrDefault(pr => pr.IdPersona == usuario.IdPersona && pr.FecBaja == null);
                 if (proveedor != null)
@@ -375,6 +442,67 @@ public class AuthService : BaseService, IAuthService
         var tokenHandler = new JwtSecurityTokenHandler();
         var token = tokenHandler.CreateToken(tokenDescriptor);
         return tokenHandler.WriteToken(token);
+    }
+
+    private static string NormalizarTipoContexto(string? tipo)
+        => (tipo ?? string.Empty).Trim().ToUpperInvariant();
+
+    private static bool EsTipoContextoValido(string tipo)
+        => tipo is "GESTOR" or "PROVEEDOR";
+
+    private static string? ObtenerTipoContextoRegistro(RegisterRequestDto request)
+    {
+        var tieneOrganizacion = request.IdOrganizacion.HasValue;
+        var tieneProveedor = request.IdProveedor.HasValue;
+
+        if (tieneOrganizacion == tieneProveedor)
+            return null;
+
+        return tieneOrganizacion ? "GESTOR" : "PROVEEDOR";
+    }
+
+    private static bool RolPuedeOperarContexto(string? roleName, string tipoContexto)
+    {
+        if (string.IsNullOrWhiteSpace(roleName))
+            return false;
+
+        if (RoleNameContains(roleName, "SUPERADMIN"))
+            return true;
+
+        return tipoContexto switch
+        {
+            "GESTOR" =>
+                RoleNameContains(roleName, "GESTOR") ||
+                RoleNameContains(roleName, "OPERADOR") ||
+                RoleNameContains(roleName, "ADMIN") ||
+                RoleNameContains(roleName, "LICITACION") ||
+                RoleNameContains(roleName, "LICITACIÓN") ||
+                RoleNameContains(roleName, "INVERSA"),
+            "PROVEEDOR" =>
+                RoleNameContains(roleName, "PROVEEDOR") ||
+                RoleNameContains(roleName, "DIRECTA"),
+            _ => false
+        };
+    }
+
+    private static List<EntidadDto> ObtenerEntidadesOperables(TUsuario usuario)
+    {
+        var entidades = new List<EntidadDto>();
+        var rol = usuario.IdRolNavigation.Nombre;
+
+        if (RolPuedeOperarContexto(rol, "GESTOR"))
+        {
+            foreach (var j in usuario.TJurisdiccionesUsuarios.Where(x => x.FecBaja == null))
+                entidades.Add(new EntidadDto { Id = j.IdOrganizacion, Tipo = "GESTOR", Nombre = j.IdOrganizacionNavigation.Nombre });
+        }
+
+        if (RolPuedeOperarContexto(rol, "PROVEEDOR"))
+        {
+            foreach (var p in usuario.IdPersonaNavigation.TProveedoresRepresentantes.Where(x => x.FecBaja == null))
+                entidades.Add(new EntidadDto { Id = p.IdProveedor, Tipo = "PROVEEDOR", Nombre = p.IdProveedorNavigation.RazonSocial });
+        }
+
+        return entidades;
     }
 
     public async Task<OperationResponse<bool>> ConfirmarEmailAsync(ConfirmEmailRequestDto request)
@@ -432,22 +560,28 @@ public class AuthService : BaseService, IAuthService
 
         await _emailService.SendEmailAsync(
             email,
-            "Nuevo código de confirmación — Trasus Argentina",
-            $@"
-                <h2>Acá va tu nuevo código</h2>
-                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{nuevoCodigo}</h1>
-                <p>Este código expira en 30 minutos.</p>
-                <p>Si no solicitaste este registro, ignorá este mensaje.</p>
-                <hr>
-                <small>Trasus Argentina — Portal de Subastas</small>
-            ");
+            "Nuevo código de confirmación — OWEN",
+            EmailTemplateHelper.GetCodigoVerificationEmail(
+                "Nuevo código generado",
+                "Solicitaste un nuevo código de verificación. Utilizá el siguiente código para confirmar tu correo:",
+                nuevoCodigo)
+        );
+
+        if (ShouldExposeDevEmailCode())
+        {
+            return OperationResponse<bool>.CreateBuilder()
+                .WithSuccess(true)
+                .WithMessage($"Codigo de confirmacion desarrollo local: {nuevoCodigo}")
+                .WithData(true)
+                .WithCode(200)
+                .Build();
+        }
 
         return Ok(true);
     }
 
     public async Task<OperationResponse<bool>> SolicitarResetPasswordAsync(SolicitarResetRequestDto request)
     {
-        // Siempre OK aunque no exista el email — no revelar qué emails están registrados
         var usuario = await _identityContext.TUsuarios
             .Include(u => u.IdEstadoNavigation)
             .FirstOrDefaultAsync(u => u.EmailLogin == request.Email);
@@ -464,17 +598,12 @@ public class AuthService : BaseService, IAuthService
 
         await _emailService.SendEmailAsync(
             request.Email,
-            "Código de recuperación — Trasus Argentina",
-            $@"
-                <h2>Recuperación de contraseña</h2>
-                <p>Recibimos una solicitud para restablecer tu contraseña.</p>
-                <p>Tu código de verificación es:</p>
-                <h1 style='font-size:32px;letter-spacing:6px;background:#f4f4f4;padding:12px;text-align:center;border-radius:8px;'>{codigo}</h1>
-                <p>Este código expira en 30 minutos.</p>
-                <p>Si no solicitaste este cambio, ignorá este mensaje.</p>
-                <hr>
-                <small>Trasus Argentina — Portal de Subastas</small>
-            ");
+            "Código de recuperación — OWEN",
+            EmailTemplateHelper.GetCodigoVerificationEmail(
+                "Recuperación de contraseña",
+                "Recibimos una solicitud para restablecer tu contraseña. Tu código de verificación es:",
+                codigo)
+        );
 
         return Ok(true);
     }
@@ -511,6 +640,16 @@ public class AuthService : BaseService, IAuthService
         return Ok(true);
     }
 
+    private bool ShouldExposeDevEmailCode()
+    {
+        var environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? _configuration["DOTNET_ENVIRONMENT"];
+        var isDevelopment = string.Equals(environment, "Development", StringComparison.OrdinalIgnoreCase);
+        var hasEmailConfig = !string.IsNullOrWhiteSpace(_configuration["Resend:From"])
+                             && !string.IsNullOrWhiteSpace(_configuration["Resend:ApiKey"]);
+
+        return isDevelopment && !hasEmailConfig;
+    }
+
     private static string GenerarCodigoConfirmacion()
         => Random.Shared.Next(100_000, 999_999).ToString();
 
@@ -530,15 +669,9 @@ public class AuthService : BaseService, IAuthService
         {
             await _emailService.SendEmailAsync(
                 admin.EmailLogin,
-                "Nuevo usuario pendiente de aprobación — Trasus Argentina",
-                $@"
-                    <h2>Nuevo registro en el sistema</h2>
-                    <p>El usuario <strong>{usuario.IdPersonaNavigation?.Nombre} {usuario.IdPersonaNavigation?.Apellido}</strong>
-                    ({usuario.EmailLogin}) confirmó su correo y está esperando aprobación.</p>
-                    <p>Ingresá al panel de administración para revisar la solicitud.</p>
-                    <hr>
-                    <small>Trasus Argentina — Portal de Subastas</small>
-                ");
+                "Nuevo usuario pendiente de aprobación — OWEN",
+                EmailTemplateHelper.GetAlertaNuevoUsuarioEmail($"{usuario.IdPersonaNavigation?.Nombre} {usuario.IdPersonaNavigation?.Apellido}", usuario.EmailLogin)
+            );
         }
     }
 }
