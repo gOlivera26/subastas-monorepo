@@ -1,6 +1,9 @@
+using MassTransit;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PortalSubastas.Contracts.Events;
 using PortalSubastas.Licitaciones.Application.ResponseDto.Common;
+using PortalSubastas.Licitaciones.Application.Services.Interfaces;
 using PortalSubastas.Licitaciones.Domain.Models;
 
 namespace PortalSubastas.Licitaciones.API.Controllers;
