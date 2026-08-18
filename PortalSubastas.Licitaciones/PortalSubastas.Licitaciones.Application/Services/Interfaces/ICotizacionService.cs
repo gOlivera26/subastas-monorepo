@@ -10,6 +10,8 @@ public interface ICotizacionService
 {
     Task<OperationResponse<List<CotizacionResponseDto>>> GetAllAsync(int? idVigencia);
     Task<OperationResponse<CotizacionResponseDto>> GetByIdAsync(int id);
+    Task<OperationResponse<SubastaDetalleReducidoDto>> GetDetalleReducidoAsync(int id);
+    Task<OperationResponse<SubastaResumenOfertasDto>> GetResumenOfertasAsync(int id);
     Task<OperationResponse<CotizacionResponseDto>> CreateAsync(CotizacionRequestDto dto);
     Task<OperationResponse<CotizacionResponseDto>> UpdateAsync(int id, CotizacionRequestDto dto);
     Task<OperationResponse<bool>> DeleteAsync(int id);

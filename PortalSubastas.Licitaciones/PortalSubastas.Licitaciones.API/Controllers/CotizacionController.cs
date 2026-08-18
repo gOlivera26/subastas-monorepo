@@ -35,6 +35,22 @@ public class CotizacionController : BaseController
         return Return(result);
     }
 
+    [HttpGet("{id:int}/detalle-reducido")]
+    [ProducesResponseType(typeof(OperationResponse<SubastaDetalleReducidoDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDetalleReducido(int id)
+    {
+        var result = await _cotizacionService.GetDetalleReducidoAsync(id);
+        return Return(result);
+    }
+
+    [HttpGet("{id:int}/resumen-ofertas")]
+    [ProducesResponseType(typeof(OperationResponse<SubastaResumenOfertasDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetResumenOfertas(int id)
+    {
+        var result = await _cotizacionService.GetResumenOfertasAsync(id);
+        return Return(result);
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(OperationResponse<CotizacionResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create([FromBody] CotizacionRequestDto dto)
