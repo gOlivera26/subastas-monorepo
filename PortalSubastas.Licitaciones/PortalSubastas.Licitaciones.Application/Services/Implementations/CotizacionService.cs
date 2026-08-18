@@ -942,7 +942,10 @@ public class CotizacionService : BaseService, ICotizacionService
 
     public async Task<OperationResponse<bool>> DeleteAsync(int id)
     {
-        var entity = await _context.TCotizaciones.FindAsync(id);
+        if (!IsSuperAdmin()) return Unauthorized<bool>();
+
+        var entity = await _context.TCotizaciones
+            .FirstOrDefaultAsync(c => c.IdCotizacion == id && c.FecBaja == null);
         if (entity == null) return NotFound<bool>();
 
         if (entity.IdEstado != 4)
@@ -958,17 +961,19 @@ public class CotizacionService : BaseService, ICotizacionService
         return Ok(true);
     }
 
-    public async Task<OperationResponse<CotizacionResponseDto>> NotificarAsync(int id)
+    public async Task<OperationResponse<SubastaOperacionResponseDto>> NotificarAsync(int id)
     {
+        if (!IsSuperAdmin()) return Unauthorized<SubastaOperacionResponseDto>();
+
         var entity = await _context.TCotizaciones
             .Include(c => c.Especificacion)
             .Include(c => c.Detalles)
-            .FirstOrDefaultAsync(c => c.IdCotizacion == id);
+            .FirstOrDefaultAsync(c => c.IdCotizacion == id && c.FecBaja == null);
 
-        if (entity == null) return NotFound<CotizacionResponseDto>();
+        if (entity == null) return NotFound<SubastaOperacionResponseDto>();
 
         if (entity.IdEstado != 4)
-            return BadRequest<CotizacionResponseDto>("Solo se puede publicar una subasta en estado Generado.");
+            return BadRequest<SubastaOperacionResponseDto>("Solo se puede publicar una subasta en estado Generado.");
 
         entity.IdEstado = 39; // EnviadaPendiente (publicada)
         PrepareAuditableEntity(entity, isNew: false);
@@ -986,7 +991,12 @@ public class CotizacionService : BaseService, ICotizacionService
             _logger.LogWarning(ex, "No se pudo publicar SubastaPublicadaEvent para Cotización {IdCotizacion}. El flujo continúa.", id);
         }
 
-        return Ok(_mapper.Map<CotizacionResponseDto>(entity));
+        return Ok(new SubastaOperacionResponseDto
+        {
+            NroCotizacion = entity.NroCotizacion,
+            IdEstado = entity.IdEstado,
+            Estado = GetEstadoNombre(entity.IdEstado)
+        });
     }
 
     private async Task PublishSubastaPublicadaEventAsync(TCotizacion entity)

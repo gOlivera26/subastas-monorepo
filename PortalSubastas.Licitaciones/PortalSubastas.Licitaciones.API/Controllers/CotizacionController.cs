@@ -68,6 +68,7 @@ public class CotizacionController : BaseController
     }
 
     [HttpDelete("{id:int}")]
+    [Authorize(Roles = "SUPERADMIN")]
     [ProducesResponseType(typeof(OperationResponse<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Delete(int id)
     {
@@ -118,7 +119,8 @@ public class CotizacionController : BaseController
 
     // --- Transiciones de estado ---
     [HttpPost("{id:int}/notificar")]
-    [ProducesResponseType(typeof(OperationResponse<CotizacionResponseDto>), StatusCodes.Status200OK)]
+    [Authorize(Roles = "SUPERADMIN")]
+    [ProducesResponseType(typeof(OperationResponse<SubastaOperacionResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Notificar(int id)
     {
         var result = await _cotizacionService.NotificarAsync(id);
