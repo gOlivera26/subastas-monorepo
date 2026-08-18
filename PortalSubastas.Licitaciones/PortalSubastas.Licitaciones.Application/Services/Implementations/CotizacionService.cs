@@ -61,11 +61,16 @@ public class CotizacionService : BaseService, ICotizacionService
 
     public async Task<OperationResponse<CotizacionResponseDto>> GetByIdAsync(int id)
     {
-        var entity = await _context.TCotizaciones
+        var query = _context.TCotizaciones
             .Include(c => c.Especificacion)
             .Include(c => c.Detalles)
             .Include(c => c.IdUnidadAdmNavigation)
-            .FirstOrDefaultAsync(c => c.IdCotizacion == id);
+            .AsQueryable();
+
+        if (!TryApplyAuctionReadVisibility(query, out query))
+            return Unauthorized<CotizacionResponseDto>();
+
+        var entity = await query.FirstOrDefaultAsync(c => c.IdCotizacion == id);
 
         if (entity == null) return NotFound<CotizacionResponseDto>();
 
@@ -90,9 +95,13 @@ public class CotizacionService : BaseService, ICotizacionService
 
         try
         {
-            var proveedores = await _context.TCotizacionProveedores
-                .Where(p => p.IdCotizacion == id && p.FecBaja == null)
-                .ToListAsync();
+            var proveedoresQuery = _context.TCotizacionProveedores
+                .Where(p => p.IdCotizacion == id && p.FecBaja == null);
+            var providerId = GetUserProveedorId();
+            if (!IsSuperAdmin() && providerId.HasValue)
+                proveedoresQuery = proveedoresQuery.Where(p => p.IdProveedor == providerId.Value);
+
+            var proveedores = await proveedoresQuery.ToListAsync();
             dto.Proveedores = _mapper.Map<List<CotizacionProveedorResponseDto>>(proveedores);
         }
         catch { dto.Proveedores = new(); }
@@ -131,6 +140,78 @@ public class CotizacionService : BaseService, ICotizacionService
         }
 
         return Ok(dto);
+    }
+
+    public async Task<OperationResponse<SubastaDetalleReducidoDto>> GetDetalleReducidoAsync(int id)
+    {
+        var query = _context.TCotizaciones
+            .AsNoTracking()
+            .Include(c => c.Especificacion)
+            .AsQueryable();
+
+        if (!TryApplyAuctionReadVisibility(query, out query))
+            return Unauthorized<SubastaDetalleReducidoDto>();
+
+        var entity = await query.FirstOrDefaultAsync(c => c.IdCotizacion == id);
+        if (entity == null)
+            return NotFound<SubastaDetalleReducidoDto>();
+
+        return Ok(new SubastaDetalleReducidoDto
+        {
+            Numero = entity.NroCotizacion,
+            Expediente = entity.Especificacion?.NroExpediente ?? string.Empty,
+            Objeto = entity.Observacion ?? string.Empty,
+            TipoContratacion = entity.IdTipoContratacion.ToDisplayName(),
+            Modalidad = entity.Especificacion?.Redeterminacion switch
+            {
+                "1" => "Pública",
+                "0" => "Privada",
+                "2" => "Cerrada",
+                _ => "No definida"
+            },
+            Estado = GetEstadoNombre(entity.IdEstado),
+            FechaInicio = entity.Especificacion?.FechaInicioSubasta,
+            FechaFinalizacion = entity.Especificacion?.FechaFinalizacionSubasta,
+            FechaLimiteConsultas = entity.Especificacion?.FechaLimiteConsultas,
+            MargenMejora = entity.Especificacion?.MargenMejora
+        });
+    }
+
+    public async Task<OperationResponse<SubastaResumenOfertasDto>> GetResumenOfertasAsync(int id)
+    {
+        var query = _context.TCotizaciones
+            .AsNoTracking()
+            .Include(c => c.Especificacion)
+            .AsQueryable();
+        if (!TryApplyAuctionReadVisibility(query, out query))
+            return Unauthorized<SubastaResumenOfertasDto>();
+
+        var entity = await query.FirstOrDefaultAsync(c => c.IdCotizacion == id);
+        if (entity == null)
+            return NotFound<SubastaResumenOfertasDto>();
+
+        var ofertas = await _context.TOfertasSubastas
+            .AsNoTracking()
+            .Where(o => o.IdCotizacion == id && o.FecBaja == null && o.Monto > 0)
+            .Select(o => new { o.IdCotizacionDetalle, o.IdRenglon, o.Monto })
+            .ToListAsync();
+
+        var porRenglon = entity.Especificacion?.CriterioAdjudicacion == 1;
+        var subastaDirecta = entity.IdTipoContratacion == (int)TipoContratacion.SubastaDirecta;
+        var mejorOferta = ofertas.Count == 0
+            ? (decimal?)null
+            : ofertas
+                .GroupBy(o => porRenglon ? o.IdRenglon : o.IdCotizacionDetalle)
+                .Sum(grupo => subastaDirecta
+                    ? grupo.Max(o => o.Monto)
+                    : grupo.Min(o => o.Monto));
+
+        return Ok(new SubastaResumenOfertasDto
+        {
+            CantidadOfertas = ofertas.Count,
+            MejorOferta = mejorOferta,
+            Estado = GetEstadoNombre(entity.IdEstado)
+        });
     }
 
     public async Task<OperationResponse<ReporteLicitacionResponseDto>> GetReporteLicitacionAsync(int idCotizacion)
@@ -1050,31 +1131,53 @@ public class CotizacionService : BaseService, ICotizacionService
         if (idVigencia.HasValue)
             query = query.Where(c => c.IdVigencia == idVigencia.Value);
 
-        var esAdmin = IsSuperAdmin();
-        var proveedorId = GetUserProveedorId();
-        if (!esAdmin && proveedorId.HasValue)
+        return query;
+    }
+
+    private bool TryApplyAuctionReadVisibility(
+        IQueryable<TCotizacion> query,
+        out IQueryable<TCotizacion> visibleQuery)
+    {
+        query = query.Where(c => c.FecBaja == null);
+
+        if (IsSuperAdmin())
         {
-            query = query.Where(c =>
-                // REGLA 1: Descartar automáticamente si el proveedor desistió (Ganadora == "D")
-                !c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.Ganadora == "D" && p.FecBaja == null)
-                &&
-                (
-                    // REGLA 2: Es pública
-                    c.Especificacion.Redeterminacion == "1"
-                    ||
-                    // REGLA 3: Es Privada/Cerrada pero el proveedor ESTÁ invitado
-                    (c.Especificacion.Redeterminacion != "1" && c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.FecBaja == null))
-                )
-            );
+            visibleQuery = query;
+            return true;
         }
 
-        return query;
+        var providerId = GetUserProveedorId();
+        if (providerId.HasValue)
+        {
+            visibleQuery = query.Where(c =>
+                !c.Proveedores.Any(p => p.IdProveedor == providerId.Value && p.Ganadora == "D" && p.FecBaja == null)
+                &&
+                (
+                    c.Especificacion.Redeterminacion == "1"
+                    || c.Proveedores.Any(p => p.IdProveedor == providerId.Value && p.FecBaja == null)
+                ));
+            return true;
+        }
+
+        var organizationId = GetUserOrganizationId();
+        if (organizationId.HasValue)
+        {
+            visibleQuery = query.Where(c => c.IdOrganizacion == organizationId.Value);
+            return true;
+        }
+
+        visibleQuery = query.Where(_ => false);
+        return false;
     }
 
     public async Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasEnCursoAsync(int? idVigencia)
     {
         var now = DateTime.Now;
-        var query = GetDashboardBaseQuery(idVigencia)
+        var query = GetDashboardBaseQuery(idVigencia);
+        if (!TryApplyAuctionReadVisibility(query, out query))
+            return Unauthorized<List<SubastaDashboardDto>>();
+
+        query = query
             .Where(c => c.IdEstado == 39 // EnvPend
                      && c.Especificacion.FechaInicioSubasta <= now 
                      && c.Especificacion.FechaFinalizacionSubasta >= now);
@@ -1086,7 +1189,11 @@ public class CotizacionService : BaseService, ICotizacionService
     public async Task<OperationResponse<List<SubastaDashboardDto>>> GetSubastasProximasAsync(int? idVigencia)
     {
         var now = DateTime.Now;
-        var query = GetDashboardBaseQuery(idVigencia)
+        var query = GetDashboardBaseQuery(idVigencia);
+        if (!TryApplyAuctionReadVisibility(query, out query))
+            return Unauthorized<List<SubastaDashboardDto>>();
+
+        query = query
             .Where(c => c.IdEstado == 39 // EnvPend
                      && c.Especificacion.FechaInicioSubasta > now)
             .OrderBy(c => c.Especificacion.FechaInicioSubasta)
@@ -1102,7 +1209,11 @@ public class CotizacionService : BaseService, ICotizacionService
         var startOfMonth = new DateTime(today.Year, today.Month, 1);
         var endOfMonth = startOfMonth.AddMonths(1).AddDays(-1);
 
-        var query = GetDashboardBaseQuery(idVigencia)
+        var query = GetDashboardBaseQuery(idVigencia);
+        if (!TryApplyAuctionReadVisibility(query, out query))
+            return Unauthorized<List<SubastaDashboardDto>>();
+
+        query = query
             .Where(c => c.Especificacion.FechaInicioSubasta >= startOfMonth 
                      && c.Especificacion.FechaInicioSubasta <= endOfMonth)
             .OrderBy(c => c.Especificacion.FechaInicioSubasta);
@@ -1144,28 +1255,8 @@ public class CotizacionService : BaseService, ICotizacionService
         if (fechaHasta.HasValue)
             query = query.Where(c => c.Especificacion.FechaFinalizacionSubasta <= fechaHasta.Value);
 
-        // Extraer contexto del usuario desde el JWT
-        var esAdmin = IsSuperAdmin();
-        var proveedorId = GetUserProveedorId();
-
-        // Lógica de visibilidad (replica del sistema viejo)
-        // Admin ve todo. Proveedor solo ve:
-        // - Subastas Públicas (Redeterminacion = "1")
-        // - Subastas Privadas (Redeterminacion = "0") donde está invitado
-        // - NO ve Cerradas (Redeterminacion = "2") a menos que esté invitado
-        // Lógica de visibilidad (replica del sistema viejo)
-        if (!esAdmin && proveedorId.HasValue)
-        {
-            query = query.Where(c =>
-                !c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.Ganadora == "D" && p.FecBaja == null)
-                &&
-                (
-                    c.Especificacion.Redeterminacion == "1" // Pública: todos ven
-                    || (c.Especificacion.Redeterminacion == "0" && c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.FecBaja == null)) // Privada
-                    || (c.Especificacion.Redeterminacion == "2" && c.Proveedores.Any(p => p.IdProveedor == proveedorId.Value && p.FecBaja == null)) // Cerrada
-                )
-            );
-        }
+        if (!TryApplyAuctionReadVisibility(query, out query))
+            return Unauthorized<List<SubastaDashboardDto>>();
 
         var data = await query.OrderByDescending(c => c.IdCotizacion).Take(100).ToListAsync();
         return Ok(await MapToDashboardAsync(data));
