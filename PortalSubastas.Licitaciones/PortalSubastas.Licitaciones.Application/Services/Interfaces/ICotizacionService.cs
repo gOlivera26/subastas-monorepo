@@ -15,7 +15,7 @@ public interface ICotizacionService
     Task<OperationResponse<CotizacionResponseDto>> CreateAsync(CotizacionRequestDto dto);
     Task<OperationResponse<CotizacionResponseDto>> UpdateAsync(int id, CotizacionRequestDto dto);
     Task<OperationResponse<bool>> DeleteAsync(int id);
-    Task<OperationResponse<CotizacionResponseDto>> NotificarAsync(int id);
+    Task<OperationResponse<SubastaOperacionResponseDto>> NotificarAsync(int id);
     Task<OperationResponse<CotizacionResponseDto>> FinalizarAsync(int id);
     Task<OperationResponse<CotizacionResponseDto>> ProrrogarAsync(int id, int minutos);
     Task<OperationResponse<CotizacionResponseDto>> DesistirAsync(int id);
