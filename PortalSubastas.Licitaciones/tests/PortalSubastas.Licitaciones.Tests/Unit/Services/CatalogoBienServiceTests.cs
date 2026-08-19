@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using AutoMapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -140,6 +141,10 @@ public class ReservaDetalleServiceTests
     {
         _mapperMock = new Mock<IMapper>();
         _httpContextMock = new Mock<IHttpContextAccessor>();
+        _httpContextMock.Setup(h => h.HttpContext).Returns(new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "SUPERADMIN") }, "Test"))
+        });
         _realCache = new MemoryCache(new MemoryCacheOptions());
     }
 
@@ -159,7 +164,7 @@ public class ReservaDetalleServiceTests
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be(400);
-        result.Message.Should().Be("La provisión no existe.");
+        result.Message.Should().Be("La nota de pedido no existe.");
     }
 
     [Fact]
@@ -177,7 +182,7 @@ public class ReservaDetalleServiceTests
             NroReserva = "2025/000001",
             IdVigencia = 1,
             IdUnidadAdm = 1,
-            IdEstado = 2,
+            IdEstado = 3,
             FechaReserva = DateOnly.FromDateTime(DateTime.Now)
         });
         await context.SaveChangesAsync();
@@ -189,7 +194,7 @@ public class ReservaDetalleServiceTests
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be(400);
-        result.Message.Should().Be("No se pueden modificar reservas autorizadas.");
+        result.Message.Should().Be("No se pueden modificar notas de pedido autorizadas.");
     }
 
     [Fact]
@@ -207,7 +212,7 @@ public class ReservaDetalleServiceTests
             NroReserva = "2025/000001",
             IdVigencia = 1,
             IdUnidadAdm = 1,
-            IdEstado = 2,
+            IdEstado = 3,
             FechaReserva = DateOnly.FromDateTime(DateTime.Now)
         });
         context.TReservaDetalles.Add(new TReservaDetalle
@@ -226,7 +231,7 @@ public class ReservaDetalleServiceTests
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be(400);
-        result.Message.Should().Be("No se pueden modificar reservas autorizadas.");
+        result.Message.Should().Be("No se pueden modificar notas de pedido autorizadas.");
     }
 
     [Fact]
@@ -244,7 +249,7 @@ public class ReservaDetalleServiceTests
             NroReserva = "2025/000001",
             IdVigencia = 1,
             IdUnidadAdm = 1,
-            IdEstado = 2,
+            IdEstado = 3,
             FechaReserva = DateOnly.FromDateTime(DateTime.Now)
         });
         context.TReservaDetalles.Add(new TReservaDetalle
@@ -262,6 +267,6 @@ public class ReservaDetalleServiceTests
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be(400);
-        result.Message.Should().Be("No se pueden modificar reservas autorizadas.");
+        result.Message.Should().Be("No se pueden modificar notas de pedido autorizadas.");
     }
 }
