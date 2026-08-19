@@ -38,6 +38,50 @@ public class CotizacionServiceReadVisibilityTests
     }
 
     [Fact]
+    public async Task GetDetalleReducidoAsync_IncludesSafeItems_WithMonedaAndBestOffer()
+    {
+        await using var context = CreateContext();
+        context.TCatalogosBiens.Add(new TCatalogosBien { IdItem = 301, Codigo = "BIEN301", NItem = "ROMERO", IdVigencia = 1 });
+        context.TReservaDetalles.Add(new TReservaDetalle { IdReservaDet = 201, IdReserva = 1, IdItem = 301, IdMoneda = 1 });
+
+        var auction = CreateAuction(1, 10);
+        auction.Detalles.Add(new TCotizacionDetalle
+        {
+            IdCotizacionDetalle = 101,
+            IdCotizacion = 1,
+            IdReservaDetalle = 201,
+            IdItem = 301,
+            Cantidad = 2,
+            ImporteBase = 1000,
+            ImporteMinimo = null
+        });
+        context.TCotizaciones.Add(auction);
+        context.TOfertasSubastas.Add(new TOfertaSubasta
+        {
+            IdOfertaSubasta = 1,
+            IdCotizacion = 1,
+            IdProveedor = 8,
+            IdCotizacionDetalle = 101,
+            Monto = 950m,
+            FechaOferta = DateTime.Now
+        });
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context, providerId: 7);
+        var result = await service.GetDetalleReducidoAsync(1);
+
+        result.Success.Should().BeTrue();
+        result.Data!.Items.Should().ContainSingle();
+        var item = result.Data.Items[0];
+        item.IdCotizacionDetalle.Should().Be(101);
+        item.NItem.Should().Be("ROMERO");
+        item.IdMoneda.Should().Be(1);
+        item.Cantidad.Should().Be(2);
+        item.ImporteBase.Should().Be(1000);
+        item.MejorOfertaActual.Should().Be(950m);
+    }
+
+    [Fact]
     public async Task GetResumenOfertasAsync_OwnAuction_ReturnsOnlyActiveAggregatesAndForeignAuctionIsNotFound()
     {
         await using var context = CreateContext();
