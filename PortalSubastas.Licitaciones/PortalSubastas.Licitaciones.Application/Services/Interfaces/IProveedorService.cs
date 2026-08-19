@@ -6,4 +6,5 @@ namespace PortalSubastas.Licitaciones.Application.Services.Interfaces;
 public interface IProveedorService
 {
     Task<OperationResponse<object>> AddProveedorAsync(int idCotizacion, ProveedorAddDto dto);
+    Task<OperationResponse<bool>> RemoveProveedorAsync(int idCotizacion, int idCotizacionProveedor);
 }
