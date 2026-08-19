@@ -25,6 +25,11 @@ public class ReservaService : BaseService, IReservaService
 
     public async Task<OperationResponse<List<ReservaResponseDto>>> GetAllAsync(ReservaFilterDto? filtros = null)
     {
+        var isSuperAdmin = IsSuperAdmin();
+        var organizationId = GetUserOrganizationId();
+        if (!isSuperAdmin && !organizationId.HasValue)
+            return Unauthorized<List<ReservaResponseDto>>();
+
         var query = _context.TReservas
             .Include(r => r.IdEstadoNavigation)
             .Include(r => r.IdUnidadAdmNavigation)
@@ -34,6 +39,9 @@ public class ReservaService : BaseService, IReservaService
             .Include(r => r.TReservaDetalles.Where(d => d.FecBaja == null && d.IdEstado != 20))
                 .ThenInclude(d => d.IdMonedaNavigation)
             .AsQueryable();
+
+        if (!isSuperAdmin)
+            query = query.Where(r => r.IdOrganizacion == organizationId!.Value);
 
         if (filtros != null)
         {
@@ -91,11 +99,17 @@ public class ReservaService : BaseService, IReservaService
 
     public async Task<OperationResponse<ReservaResponseDto>> GetByIdAsync(int id)
     {
+        var isSuperAdmin = IsSuperAdmin();
+        var organizationId = GetUserOrganizationId();
+        if (!isSuperAdmin && !organizationId.HasValue)
+            return Unauthorized<ReservaResponseDto>();
+
         var reserva = await _context.TReservas
             .Include(r => r.IdEstadoNavigation)
             .Include(r => r.IdUnidadAdmNavigation)
             .Include(r => r.IdSubResponsableNavigation)
-            .FirstOrDefaultAsync(r => r.IdReserva == id);
+            .FirstOrDefaultAsync(r => r.IdReserva == id &&
+                (isSuperAdmin || r.IdOrganizacion == organizationId!.Value));
 
         if (reserva == null)
             return NotFound<ReservaResponseDto>();
@@ -105,6 +119,11 @@ public class ReservaService : BaseService, IReservaService
 
     public async Task<OperationResponse<ReservaResponseDto>> CreateAsync(ReservaRequestDto dto)
     {
+        var isSuperAdmin = IsSuperAdmin();
+        var organizationId = GetUserOrganizationId();
+        if (!isSuperAdmin && !organizationId.HasValue)
+            return Unauthorized<ReservaResponseDto>();
+
         var vigenciaActiva = await _context.TVigencias
             .FirstOrDefaultAsync(v => v.ActivoEjecucion == true);
 
@@ -112,10 +131,23 @@ public class ReservaService : BaseService, IReservaService
             return BadRequest<ReservaResponseDto>("No hay una vigencia activa configurada.");
 
         var unidadAdm = await _context.TUnidadesAdministrativas
-            .FirstOrDefaultAsync(u => u.IdUnidadAdm == dto.IdUnidadAdm);
+            .FirstOrDefaultAsync(u => u.IdUnidadAdm == dto.IdUnidadAdm &&
+                (isSuperAdmin || u.IdOrganizacion == organizationId!.Value));
 
         if (unidadAdm == null)
-            return BadRequest<ReservaResponseDto>("La unidad administrativa no existe.");
+            return isSuperAdmin
+                ? BadRequest<ReservaResponseDto>("La unidad administrativa no existe.")
+                : NotFound<ReservaResponseDto>();
+
+        if (!isSuperAdmin && dto.IdSubResponsable.HasValue)
+        {
+            var subResponsableValido = await _context.TSubResponsables
+                .AnyAsync(s => s.IdSubResponsable == dto.IdSubResponsable.Value &&
+                    s.IdUnidadAdmNavigation.IdOrganizacion == organizationId!.Value);
+
+            if (!subResponsableValido)
+                return NotFound<ReservaResponseDto>();
+        }
 
         var nroSecuencial = await _context.TReservas
             .Where(r => r.IdVigencia == vigenciaActiva.IdVigencia && r.IdOrganizacion == unidadAdm.IdOrganizacion)
@@ -133,7 +165,7 @@ public class ReservaService : BaseService, IReservaService
         var entity = _mapper.Map<TReserva>(dto);
         entity.NroReserva = nroReserva;
         entity.IdVigencia = vigenciaActiva.IdVigencia;
-        entity.IdOrganizacion = unidadAdm.IdOrganizacion;
+        entity.IdOrganizacion = isSuperAdmin ? unidadAdm.IdOrganizacion : organizationId!.Value;
         entity.IdEstado = 1; // GENERADO
 
         PrepareAuditableEntity(entity, isNew: true);
@@ -148,9 +180,34 @@ public class ReservaService : BaseService, IReservaService
 
     public async Task<OperationResponse<ReservaResponseDto>> UpdateAsync(int id, ReservaRequestDto dto)
     {
-        var reserva = await _context.TReservas.FindAsync(id);
+        var isSuperAdmin = IsSuperAdmin();
+        var organizationId = GetUserOrganizationId();
+        if (!isSuperAdmin && !organizationId.HasValue)
+            return Unauthorized<ReservaResponseDto>();
+
+        var reserva = await _context.TReservas
+            .FirstOrDefaultAsync(r => r.IdReserva == id &&
+                (isSuperAdmin || r.IdOrganizacion == organizationId!.Value));
         if (reserva == null)
             return NotFound<ReservaResponseDto>();
+
+        if (!isSuperAdmin)
+        {
+            var unidadAdmValida = await _context.TUnidadesAdministrativas
+                .AnyAsync(u => u.IdUnidadAdm == dto.IdUnidadAdm &&
+                    u.IdOrganizacion == organizationId!.Value);
+            if (!unidadAdmValida)
+                return NotFound<ReservaResponseDto>();
+
+            if (dto.IdSubResponsable.HasValue)
+            {
+                var subResponsableValido = await _context.TSubResponsables
+                    .AnyAsync(s => s.IdSubResponsable == dto.IdSubResponsable.Value &&
+                        s.IdUnidadAdmNavigation.IdOrganizacion == organizationId!.Value);
+                if (!subResponsableValido)
+                    return NotFound<ReservaResponseDto>();
+            }
+        }
 
         reserva.IdUnidadAdm = dto.IdUnidadAdm;
         reserva.IdSubResponsable = dto.IdSubResponsable;
@@ -167,7 +224,14 @@ public class ReservaService : BaseService, IReservaService
 
     public async Task<OperationResponse<bool>> DeleteAsync(int id)
     {
-        var reserva = await _context.TReservas.FindAsync(id);
+        var isSuperAdmin = IsSuperAdmin();
+        var organizationId = GetUserOrganizationId();
+        if (!isSuperAdmin && !organizationId.HasValue)
+            return Unauthorized<bool>();
+
+        var reserva = await _context.TReservas
+            .FirstOrDefaultAsync(r => r.IdReserva == id &&
+                (isSuperAdmin || r.IdOrganizacion == organizationId!.Value));
         if (reserva == null)
             return NotFound<bool>();
 
@@ -181,10 +245,17 @@ public class ReservaService : BaseService, IReservaService
 
     public async Task<OperationResponse<ReservaResponseDto>> AutorizarAsync(int id, AutorizarReservaDto dto)
     {
+        var isSuperAdmin = IsSuperAdmin();
+        var organizationId = GetUserOrganizationId();
+        if (!isSuperAdmin && !organizationId.HasValue)
+            return Unauthorized<ReservaResponseDto>();
+
         if (dto == null || string.IsNullOrWhiteSpace(dto.MotivoAutorizacion))
             return BadRequest<ReservaResponseDto>("El motivo de autorización es obligatorio.");
 
-        var reserva = await _context.TReservas.FindAsync(id);
+        var reserva = await _context.TReservas
+            .FirstOrDefaultAsync(r => r.IdReserva == id &&
+                (isSuperAdmin || r.IdOrganizacion == organizationId!.Value));
         if (reserva == null)
             return NotFound<ReservaResponseDto>();
 
@@ -212,9 +283,15 @@ public class ReservaService : BaseService, IReservaService
 
     public async Task<OperationResponse<ReservaResponseDto>> ClonarAsync(int id)
     {
+        var isSuperAdmin = IsSuperAdmin();
+        var organizationId = GetUserOrganizationId();
+        if (!isSuperAdmin && !organizationId.HasValue)
+            return Unauthorized<ReservaResponseDto>();
+
         var original = await _context.TReservas
             .Include(r => r.TReservaDetalles.Where(d => d.FecBaja == null))
-            .FirstOrDefaultAsync(r => r.IdReserva == id);
+            .FirstOrDefaultAsync(r => r.IdReserva == id &&
+                (isSuperAdmin || r.IdOrganizacion == organizationId!.Value));
 
         if (original == null)
             return NotFound<ReservaResponseDto>();
