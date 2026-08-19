@@ -965,88 +965,86 @@ public class CotizacionService : BaseService, ICotizacionService
     {
         if (!IsSuperAdmin()) return Unauthorized<SubastaOperacionResponseDto>();
 
-        var entity = await _context.TCotizaciones
-            .Include(c => c.Especificacion)
-            .Include(c => c.Detalles)
-            .FirstOrDefaultAsync(c => c.IdCotizacion == id && c.FecBaja == null);
+        var publication = await AuctionProviderMutationLock.ExecuteAsync(_context, id, () => PreparePublicationAsync(id));
+        if (publication.Response.Success != true)
+            return publication.Response;
 
-        if (entity == null) return NotFound<SubastaOperacionResponseDto>();
-
-        if (entity.IdEstado != 4)
-            return BadRequest<SubastaOperacionResponseDto>("Solo se puede publicar una subasta en estado Generado.");
-
-        entity.IdEstado = 39; // EnviadaPendiente (publicada)
-        PrepareAuditableEntity(entity, isNew: false);
-        await _context.SaveChangesAsync();
-
-        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PUBLICADA", "LICITACIONES", new { entity.IdCotizacion, entity.NroCotizacion });
-
-        // Publicar SubastaPublicadaEvent con lista de proveedores activos
+        await PublishSystemLogAsync(_publishEndpoint, "SUBASTA_PUBLICADA", "LICITACIONES", new { publication.Entity!.IdCotizacion, publication.Entity.NroCotizacion });
         try
         {
-            await PublishSubastaPublicadaEventAsync(entity);
+            await PublishSubastaPublicadaEventAsync(publication.Entity, publication.Recipients!);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "No se pudo publicar SubastaPublicadaEvent para Cotización {IdCotizacion}. El flujo continúa.", id);
         }
+        return publication.Response;
+    }
 
-        return Ok(new SubastaOperacionResponseDto
+    private async Task<PublicationPreparation> PreparePublicationAsync(int id)
+    {
+        var entity = await _context.TCotizaciones
+            .Include(c => c.Especificacion)
+            .Include(c => c.Detalles)
+            .FirstOrDefaultAsync(c => c.IdCotizacion == id && c.FecBaja == null);
+
+        if (entity == null) return new(NotFound<SubastaOperacionResponseDto>(), null, null);
+
+        if (entity.IdEstado != 4)
+            return new(BadRequest<SubastaOperacionResponseDto>("Solo se puede publicar una subasta en estado Generado."), null, null);
+
+        var recipients = await GetPublicationRecipientsAsync(entity.IdCotizacion);
+        if (recipients.Count == 0)
+            return new(BadRequest<SubastaOperacionResponseDto>("La subasta debe tener proveedores activos con representantes configurados antes de publicarse."), null, null);
+
+        entity.IdEstado = 39; // EnviadaPendiente (publicada)
+        PrepareAuditableEntity(entity, isNew: false);
+        await _context.SaveChangesAsync();
+
+        return new(Ok(new SubastaOperacionResponseDto
         {
             NroCotizacion = entity.NroCotizacion,
             IdEstado = entity.IdEstado,
             Estado = GetEstadoNombre(entity.IdEstado)
-        });
+        }), entity, recipients);
     }
 
-    private async Task PublishSubastaPublicadaEventAsync(TCotizacion entity)
+    private sealed record PublicationPreparation(OperationResponse<SubastaOperacionResponseDto> Response, TCotizacion? Entity, List<ProveedorInfo>? Recipients);
+
+    private async Task<List<ProveedorInfo>> GetPublicationRecipientsAsync(int idCotizacion)
     {
-        var proveedoresActivos = await _context.TCotizacionProveedores
-            .Where(p => p.IdCotizacion == entity.IdCotizacion && p.FecBaja == null)
+        var proveedorIds = await _context.TCotizacionProveedores
+            .Where(p => p.IdCotizacion == idCotizacion && p.FecBaja == null)
+            .Select(p => p.IdProveedor)
+            .Distinct()
             .ToListAsync();
 
-        if (proveedoresActivos.Count == 0)
-        {
-            _logger.LogInformation("No hay proveedores activos para Cotización {IdCotizacion}. No se publica SubastaPublicadaEvent.", entity.IdCotizacion);
-            return;
-        }
-
-        var proveedorIds = proveedoresActivos.Select(p => p.IdProveedor).Distinct().ToList();
-
-        var proveedoresInfo = new List<ProveedorInfo>();
+        var recipients = new List<ProveedorInfo>();
         foreach (var proveedorId in proveedorIds)
         {
-            var representantes = await _proveedorRepresentanteService.GetRepresentantesAsync(proveedorId);
-            proveedoresInfo.AddRange(representantes.Select(r => new ProveedorInfo(
-                proveedorId,
-                r.Email,
-                r.NombrePersona
-            )));
+            var representantes = await _proveedorRepresentanteService.GetRepresentantesAsync(proveedorId) ?? [];
+            recipients.AddRange(representantes.Select(r => new ProveedorInfo(proveedorId, r.Email, r.NombrePersona)));
         }
 
-        if (proveedoresInfo.Count == 0)
-        {
-            _logger.LogInformation("No se encontraron datos de proveedores activos para Cotización {IdCotizacion}.", entity.IdCotizacion);
-            return;
-        }
+        return recipients;
+    }
 
-        var tipoNombre = entity.IdTipoContratacion.ToDisplayName();
-
+    private async Task PublishSubastaPublicadaEventAsync(TCotizacion entity, List<ProveedorInfo> recipients)
+    {
         var subastaEvent = new SubastaPublicadaEvent(
             IdCotizacion: entity.IdCotizacion,
             NroCotizacion: entity.NroCotizacion,
             Titulo: entity.Observacion ?? "Subasta " + entity.NroCotizacion,
             FechaInicio: entity.Especificacion?.FechaInicioSubasta,
             FechaFin: entity.Especificacion?.FechaFinalizacionSubasta,
-            TipoContratacion: tipoNombre,
-            Proveedores: proveedoresInfo,
+            TipoContratacion: entity.IdTipoContratacion.ToDisplayName(),
+            Proveedores: recipients,
             OccuredOn: DateTime.UtcNow
         );
 
         await _publishEndpoint.Publish(subastaEvent);
-        _logger.LogInformation("SubastaPublicadaEvent publicado: Cotización {IdCotizacion}, {Count} proveedores", entity.IdCotizacion, proveedoresInfo.Count);
+        _logger.LogInformation("SubastaPublicadaEvent publicado: Cotización {IdCotizacion}, {Count} destinatarios", entity.IdCotizacion, recipients.Count);
     }
-
     public async Task<OperationResponse<CotizacionResponseDto>> FinalizarAsync(int id)
     {
         var entity = await _context.TCotizaciones
@@ -2043,4 +2041,3 @@ public async Task<OperationResponse<MetricasAhorroDto>> GetMetricasAhorroAsync(i
     private async Task<List<(string Email, string NombrePersona)>> GetRepresentantesAsync(int idProveedor)
         => await _proveedorRepresentanteService.GetRepresentantesAsync(idProveedor);
 }
-
