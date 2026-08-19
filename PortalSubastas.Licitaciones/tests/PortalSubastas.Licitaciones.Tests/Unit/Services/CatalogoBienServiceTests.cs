@@ -1,9 +1,11 @@
+using System.Security.Claims;
 using AutoMapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
+using MassTransit;
 using PortalSubastas.Licitaciones.Application.AutoMapper;
 using PortalSubastas.Licitaciones.Application.RequestDto.Catalogos;
 using PortalSubastas.Licitaciones.Application.RequestDto.ReservaDetalle;
@@ -139,6 +141,10 @@ public class ReservaDetalleServiceTests
     {
         _mapperMock = new Mock<IMapper>();
         _httpContextMock = new Mock<IHttpContextAccessor>();
+        _httpContextMock.Setup(h => h.HttpContext).Returns(new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "SUPERADMIN") }, "Test"))
+        });
         _realCache = new MemoryCache(new MemoryCacheOptions());
     }
 
@@ -150,7 +156,7 @@ public class ReservaDetalleServiceTests
             .Options;
 
         await using var context = new PortalSubastasContext(options);
-        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache);
+        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache, Mock.Of<IPublishEndpoint>());
 
         var dto = new ReservaDetalleRequestDto { IdReserva = 999, IdItem = 10 };
 
@@ -158,7 +164,7 @@ public class ReservaDetalleServiceTests
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be(400);
-        result.Message.Should().Be("La provisión no existe.");
+        result.Message.Should().Be("La nota de pedido no existe.");
     }
 
     [Fact]
@@ -176,19 +182,19 @@ public class ReservaDetalleServiceTests
             NroReserva = "2025/000001",
             IdVigencia = 1,
             IdUnidadAdm = 1,
-            IdEstado = 2,
+            IdEstado = 3,
             FechaReserva = DateOnly.FromDateTime(DateTime.Now)
         });
         await context.SaveChangesAsync();
 
-        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache);
+        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache, Mock.Of<IPublishEndpoint>());
         var dto = new ReservaDetalleRequestDto { IdReserva = 5, IdItem = 10 };
 
         var result = await service.CreateAsync(dto);
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be(400);
-        result.Message.Should().Be("No se pueden modificar reservas autorizadas.");
+        result.Message.Should().Be("No se pueden modificar notas de pedido autorizadas.");
     }
 
     [Fact]
@@ -206,7 +212,7 @@ public class ReservaDetalleServiceTests
             NroReserva = "2025/000001",
             IdVigencia = 1,
             IdUnidadAdm = 1,
-            IdEstado = 2,
+            IdEstado = 3,
             FechaReserva = DateOnly.FromDateTime(DateTime.Now)
         });
         context.TReservaDetalles.Add(new TReservaDetalle
@@ -218,14 +224,14 @@ public class ReservaDetalleServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache);
+        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache, Mock.Of<IPublishEndpoint>());
         var dto = new ReservaDetalleRequestDto { IdReserva = 5, IdItem = 10, Cantidad = 5, Importe = 1200 };
 
         var result = await service.UpdateAsync(3, dto);
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be(400);
-        result.Message.Should().Be("No se pueden modificar reservas autorizadas.");
+        result.Message.Should().Be("No se pueden modificar notas de pedido autorizadas.");
     }
 
     [Fact]
@@ -243,7 +249,7 @@ public class ReservaDetalleServiceTests
             NroReserva = "2025/000001",
             IdVigencia = 1,
             IdUnidadAdm = 1,
-            IdEstado = 2,
+            IdEstado = 3,
             FechaReserva = DateOnly.FromDateTime(DateTime.Now)
         });
         context.TReservaDetalles.Add(new TReservaDetalle
@@ -255,12 +261,12 @@ public class ReservaDetalleServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache);
+        var service = new ReservaDetalleService(context, _mapperMock.Object, _httpContextMock.Object, _realCache, Mock.Of<IPublishEndpoint>());
 
         var result = await service.DeleteAsync(3);
 
         result.Success.Should().BeFalse();
         result.Code.Should().Be(400);
-        result.Message.Should().Be("No se pueden modificar reservas autorizadas.");
+        result.Message.Should().Be("No se pueden modificar notas de pedido autorizadas.");
     }
 }
