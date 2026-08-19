@@ -39,22 +39,71 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
         if (!idProveedor.HasValue)
             return BadRequest<List<OfertaItemResponseDto>>("No se pudo identificar al proveedor.");
 
+        var procesamiento = await AuctionProviderMutationLock.ExecuteAsync(
+            _context,
+            idCotizacion,
+            () => ProcesarBajoLockAsync(idCotizacion, idProveedor.Value, ofertas));
+
+        if (procesamiento.Respuesta is not null)
+            return procesamiento.Respuesta;
+
+        if (procesamiento.OfertasValidas.Any())
+        {
+            await NotificarProcesamientoAsync(
+                procesamiento.IdCotizacion,
+                procesamiento.IdProveedor,
+                procesamiento.Resultados,
+                procesamiento.OfertasValidas,
+                procesamiento.Prorrogada,
+                procesamiento.SubastaCerradaPorTope,
+                procesamiento.NuevaFechaFin);
+        }
+
+        foreach (var r in procesamiento.Resultados)
+        {
+            r.Prorrogada = procesamiento.Prorrogada;
+            r.FechaFinProrroga = procesamiento.NuevaFechaFin;
+        }
+
+        return Ok(procesamiento.Resultados);
+    }
+
+    private async Task<OfertaProcesamiento> ProcesarBajoLockAsync(int idCotizacion, int idProveedor, List<OfertaItemRequestDto> ofertas)
+    {
+        var procesamiento = new OfertaProcesamiento
+        {
+            IdCotizacion = idCotizacion,
+            IdProveedor = idProveedor
+        };
+
         var cotizacion = await _context.TCotizaciones
             .Include(c => c.Especificacion)
             .Include(c => c.Detalles)
             .FirstOrDefaultAsync(c => c.IdCotizacion == idCotizacion);
 
         if (cotizacion == null)
-            return NotFound<List<OfertaItemResponseDto>>();
+        {
+            procesamiento.Respuesta = NotFound<List<OfertaItemResponseDto>>();
+            return procesamiento;
+        }
 
         if (cotizacion.IdEstado != 39) // 39 = Enviada Pendiente (En Curso)
-            return BadRequest<List<OfertaItemResponseDto>>("La subasta no se encuentra en curso.");
+        {
+            procesamiento.Respuesta = BadRequest<List<OfertaItemResponseDto>>("La subasta no se encuentra en curso.");
+            return procesamiento;
+        }
 
         var ahora = DateTime.Now;
         if (ahora < cotizacion.Especificacion?.FechaInicioSubasta)
-            return BadRequest<List<OfertaItemResponseDto>>("La subasta aún no ha comenzado.");
+        {
+            procesamiento.Respuesta = BadRequest<List<OfertaItemResponseDto>>("La subasta aún no ha comenzado.");
+            return procesamiento;
+        }
         if (ahora > cotizacion.Especificacion?.FechaFinalizacionSubasta)
-            return BadRequest<List<OfertaItemResponseDto>>("La subasta ya ha finalizado.");
+        {
+            procesamiento.Respuesta = BadRequest<List<OfertaItemResponseDto>>("La subasta ya ha finalizado.");
+            return procesamiento;
+        }
 
         var requiereGarantia = cotizacion.IdTipoContratacion == 8
             || cotizacion.Especificacion?.GestionDocumentacion == true;
@@ -62,11 +111,12 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
         if (requiereGarantia)
         {
             bool tieneGarantia = await _context.TGarantiasSubastas
-                .AnyAsync(g => g.IdCotizacion == idCotizacion && g.IdProveedor == idProveedor.Value && g.FecBaja == null);
+                .AnyAsync(g => g.IdCotizacion == idCotizacion && g.IdProveedor == idProveedor && g.FecBaja == null);
 
             if (!tieneGarantia)
             {
-                return BadRequest<List<OfertaItemResponseDto>>("Para poder ofertar debe subir la garantía y/o pagaré correspondiente.");
+                procesamiento.Respuesta = BadRequest<List<OfertaItemResponseDto>>("Para poder ofertar debe subir la garantía y/o pagaré correspondiente.");
+                return procesamiento;
             }
         }
 
@@ -75,8 +125,8 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
             .Where(r => detallesIds.Contains(r.IdReservaDet))
             .ToDictionaryAsync(r => r.IdReservaDet, r => r.IdMoneda);
 
-        var resultados = new List<OfertaItemResponseDto>();
-        var ofertasValidas = new List<TOfertaSubasta>();
+        var resultados = procesamiento.Resultados;
+        var ofertasValidas = procesamiento.OfertasValidas;
         var margenMejora = cotizacion.Especificacion?.MargenMejora ?? 0;
 
         foreach (var oferta in ofertas)
@@ -90,6 +140,20 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
             if (oferta.Monto <= 0)
             {
                 resultItem.TextoError = "La oferta debe ser estrictamente mayor a $0.00.";
+                resultados.Add(resultItem);
+                continue;
+            }
+
+            var esDuplicada = await _context.TOfertasSubastas.AnyAsync(o =>
+                o.IdCotizacion == idCotizacion &&
+                o.IdProveedor == idProveedor &&
+                o.IdCotizacionDetalle == oferta.IdCotizacionDetalle &&
+                o.IdRenglon == oferta.IdRenglon &&
+                o.Monto == oferta.Monto);
+
+            if (esDuplicada)
+            {
+                resultItem.TextoError = "Ya registraste una oferta idéntica para este ítem.";
                 resultados.Add(resultItem);
                 continue;
             }
@@ -165,7 +229,7 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
                 var nuevaOferta = new TOfertaSubasta
                 {
                     IdCotizacion = idCotizacion,
-                    IdProveedor = idProveedor.Value,
+                    IdProveedor = idProveedor,
                     IdCotizacionDetalle = oferta.IdCotizacionDetalle,
                     IdRenglon = oferta.IdRenglon,
                     Monto = oferta.Monto,
@@ -176,7 +240,7 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
                 ofertasValidas.Add(nuevaOferta);
 
                 resultItem.Monto = oferta.Monto;
-                resultItem.IdProveedor = idProveedor.Value;
+                resultItem.IdProveedor = idProveedor;
                 resultItem.FechaOferta = ahora;
             }
 
@@ -242,78 +306,98 @@ public class OfertaSubastaService : BaseService, IOfertaSubastaService
             }
 
             await _context.SaveChangesAsync();
-
-            await PublishSystemLogAsync(_publishEndpoint, "OFERTAS_PROCESADAS", "LICITACIONES",
-                new { IdCotizacion = idCotizacion, IdProveedor = idProveedor.Value, OfertasRecibidas = ofertasValidas.Count, SubastaCerradaPorTope = subastaCerradaPorTope, Prorrogada = prorrogada });
-
-            // 3. Notificaciones SignalR
-            foreach (var ov in ofertasValidas)
-            {
-                var res = resultados.First(r => r.IdCotizacionDetalle == ov.IdCotizacionDetalle && r.IdRenglon == ov.IdRenglon);
-                res.IdOfertaSubasta = ov.IdOfertaSubasta;
-
-                var proveedores = await _providerLookupService.GetByIdsAsync(new[] { ov.IdProveedor });
-                proveedores.TryGetValue(ov.IdProveedor, out var proveedorInfo);
-
-                await _notificationService.NotificarNuevaOfertaAsync(
-                    idCotizacion,
-                    ov.IdOfertaSubasta,
-                    ov.IdCotizacionDetalle,
-                    ov.IdRenglon,
-                    ov.Monto,
-                    ov.IdProveedor,
-                    ov.FechaOferta,
-                    proveedorInfo?.RazonSocial,
-                    ov.UsrIng
-                );
-            }
-
-            // 4. Notificar mejores ofertas anónimas a todos
-            var itemsAfectados = ofertasValidas
-                .Select(ov => new { ov.IdCotizacionDetalle, ov.IdRenglon })
-                .Distinct()
-                .ToList();
-
-            foreach (var item in itemsAfectados)
-            {
-                decimal? mejorMonto;
-                if (item.IdRenglon.HasValue)
-                {
-                    mejorMonto = await _context.TOfertasSubastas
-                        .Where(o => o.IdCotizacion == idCotizacion && o.IdRenglon == item.IdRenglon)
-                        .MinAsync(o => (decimal?)o.Monto);
-                }
-                else
-                {
-                    mejorMonto = await _context.TOfertasSubastas
-                        .Where(o => o.IdCotizacion == idCotizacion && o.IdCotizacionDetalle == item.IdCotizacionDetalle)
-                        .MinAsync(o => (decimal?)o.Monto);
-                }
-
-                if (mejorMonto.HasValue)
-                {
-                    await _notificationService.NotificarMejorOfertaActualizadaAsync(
-                        idCotizacion, item.IdCotizacionDetalle, item.IdRenglon, mejorMonto.Value);
-                }
-            }
-
-            if (subastaCerradaPorTope)
-            {
-                await _notificationService.NotificarCierrePorTopeAsync(idCotizacion);
-            }
-            else if (prorrogada && nuevaFechaFin.HasValue)
-            {
-                await _notificationService.NotificarProrrogaAsync(idCotizacion, nuevaFechaFin.Value);
-            }
         }
 
-        foreach (var r in resultados)
+        procesamiento.Prorrogada = prorrogada;
+        procesamiento.SubastaCerradaPorTope = subastaCerradaPorTope;
+        procesamiento.NuevaFechaFin = nuevaFechaFin;
+
+        return procesamiento;
+    }
+
+    private async Task NotificarProcesamientoAsync(
+        int idCotizacion,
+        int idProveedor,
+        List<OfertaItemResponseDto> resultados,
+        List<TOfertaSubasta> ofertasValidas,
+        bool prorrogada,
+        bool subastaCerradaPorTope,
+        DateTime? nuevaFechaFin)
+    {
+        await PublishSystemLogAsync(_publishEndpoint, "OFERTAS_PROCESADAS", "LICITACIONES",
+            new { IdCotizacion = idCotizacion, IdProveedor = idProveedor, OfertasRecibidas = ofertasValidas.Count, SubastaCerradaPorTope = subastaCerradaPorTope, Prorrogada = prorrogada });
+
+        // 3. Notificaciones SignalR
+        foreach (var ov in ofertasValidas)
         {
-            r.Prorrogada = prorrogada;
-            r.FechaFinProrroga = nuevaFechaFin;
+            var res = resultados.First(r => r.IdCotizacionDetalle == ov.IdCotizacionDetalle && r.IdRenglon == ov.IdRenglon);
+            res.IdOfertaSubasta = ov.IdOfertaSubasta;
+
+            var proveedores = await _providerLookupService.GetByIdsAsync(new[] { ov.IdProveedor });
+            proveedores.TryGetValue(ov.IdProveedor, out var proveedorInfo);
+
+            await _notificationService.NotificarNuevaOfertaAsync(
+                idCotizacion,
+                ov.IdOfertaSubasta,
+                ov.IdCotizacionDetalle,
+                ov.IdRenglon,
+                ov.Monto,
+                ov.IdProveedor,
+                ov.FechaOferta,
+                proveedorInfo?.RazonSocial,
+                ov.UsrIng
+            );
         }
 
-        return Ok(resultados);
+        // 4. Notificar mejores ofertas anónimas a todos
+        var itemsAfectados = ofertasValidas
+            .Select(ov => new { ov.IdCotizacionDetalle, ov.IdRenglon })
+            .Distinct()
+            .ToList();
+
+        foreach (var item in itemsAfectados)
+        {
+            decimal? mejorMonto;
+            if (item.IdRenglon.HasValue)
+            {
+                mejorMonto = await _context.TOfertasSubastas
+                    .Where(o => o.IdCotizacion == idCotizacion && o.IdRenglon == item.IdRenglon)
+                    .MinAsync(o => (decimal?)o.Monto);
+            }
+            else
+            {
+                mejorMonto = await _context.TOfertasSubastas
+                    .Where(o => o.IdCotizacion == idCotizacion && o.IdCotizacionDetalle == item.IdCotizacionDetalle)
+                    .MinAsync(o => (decimal?)o.Monto);
+            }
+
+            if (mejorMonto.HasValue)
+            {
+                await _notificationService.NotificarMejorOfertaActualizadaAsync(
+                    idCotizacion, item.IdCotizacionDetalle, item.IdRenglon, mejorMonto.Value);
+            }
+        }
+
+        if (subastaCerradaPorTope)
+        {
+            await _notificationService.NotificarCierrePorTopeAsync(idCotizacion);
+        }
+        else if (prorrogada && nuevaFechaFin.HasValue)
+        {
+            await _notificationService.NotificarProrrogaAsync(idCotizacion, nuevaFechaFin.Value);
+        }
+    }
+
+    private sealed class OfertaProcesamiento
+    {
+        public int IdCotizacion { get; set; }
+        public int IdProveedor { get; set; }
+        public OperationResponse<List<OfertaItemResponseDto>>? Respuesta { get; set; }
+        public List<OfertaItemResponseDto> Resultados { get; set; } = new();
+        public List<TOfertaSubasta> OfertasValidas { get; set; } = new();
+        public bool Prorrogada { get; set; }
+        public bool SubastaCerradaPorTope { get; set; }
+        public DateTime? NuevaFechaFin { get; set; }
     }
 
     public async Task<OperationResponse<object>> GetHistorialAsync(int idCotizacion)
