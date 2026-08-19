@@ -147,6 +147,7 @@ public class CotizacionService : BaseService, ICotizacionService
         var query = _context.TCotizaciones
             .AsNoTracking()
             .Include(c => c.Especificacion)
+            .Include(c => c.Detalles)
             .AsQueryable();
 
         if (!TryApplyAuctionReadVisibility(query, out query))
@@ -155,6 +156,47 @@ public class CotizacionService : BaseService, ICotizacionService
         var entity = await query.FirstOrDefaultAsync(c => c.IdCotizacion == id);
         if (entity == null)
             return NotFound<SubastaDetalleReducidoDto>();
+
+        var itemIds = entity.Detalles.Select(d => d.IdItem).ToList();
+        var itemsMap = await _context.TCatalogosBiens
+            .AsNoTracking()
+            .Where(i => itemIds.Contains(i.IdItem))
+            .ToDictionaryAsync(i => i.IdItem, i => i.NItem);
+
+        var resDetIds = entity.Detalles.Select(d => d.IdReservaDetalle).ToList();
+        var monedasMap = await _context.TReservaDetalles
+            .AsNoTracking()
+            .Where(rd => resDetIds.Contains(rd.IdReservaDet))
+            .ToDictionaryAsync(rd => rd.IdReservaDet, rd => rd.IdMoneda);
+
+        var ofertas = await _context.TOfertasSubastas
+            .AsNoTracking()
+            .Where(o => o.IdCotizacion == id && o.FecBaja == null && o.Monto > 0)
+            .Select(o => new { o.IdCotizacionDetalle, o.IdRenglon, o.Monto })
+            .ToListAsync();
+
+        var porRenglon = entity.Especificacion?.CriterioAdjudicacion == 1;
+
+        var items = entity.Detalles
+            .Where(d => d.FecBaja == null)
+            .Select(d => new SubastaItemReducidoDto
+            {
+                IdCotizacionDetalle = d.IdCotizacionDetalle,
+                IdRenglon = d.IdRenglon,
+                NItem = itemsMap.TryGetValue(d.IdItem, out var nItem) ? nItem : string.Empty,
+                IdMoneda = monedasMap.TryGetValue(d.IdReservaDetalle, out var moneda) ? moneda : null,
+                Cantidad = d.Cantidad,
+                ImporteBase = d.ImporteBase,
+                ImporteMinimo = d.ImporteMinimo,
+                MejorOfertaActual = ofertas
+                    .Where(o => porRenglon
+                        ? (d.IdRenglon.HasValue && o.IdRenglon == d.IdRenglon)
+                        : o.IdCotizacionDetalle == d.IdCotizacionDetalle)
+                    .Select(o => (decimal?)o.Monto)
+                    .DefaultIfEmpty(null)
+                    .Min()
+            })
+            .ToList();
 
         return Ok(new SubastaDetalleReducidoDto
         {
@@ -173,7 +215,8 @@ public class CotizacionService : BaseService, ICotizacionService
             FechaInicio = entity.Especificacion?.FechaInicioSubasta,
             FechaFinalizacion = entity.Especificacion?.FechaFinalizacionSubasta,
             FechaLimiteConsultas = entity.Especificacion?.FechaLimiteConsultas,
-            MargenMejora = entity.Especificacion?.MargenMejora
+            MargenMejora = entity.Especificacion?.MargenMejora,
+            Items = items
         });
     }
 

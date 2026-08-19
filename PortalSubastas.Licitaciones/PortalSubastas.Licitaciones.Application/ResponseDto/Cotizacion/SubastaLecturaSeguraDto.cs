@@ -12,6 +12,19 @@ public class SubastaDetalleReducidoDto
     public DateTime? FechaFinalizacion { get; set; }
     public DateTime? FechaLimiteConsultas { get; set; }
     public decimal? MargenMejora { get; set; }
+    public List<SubastaItemReducidoDto> Items { get; set; } = new();
+}
+
+public class SubastaItemReducidoDto
+{
+    public int IdCotizacionDetalle { get; set; }
+    public int? IdRenglon { get; set; }
+    public string NItem { get; set; } = string.Empty;
+    public int? IdMoneda { get; set; }
+    public decimal Cantidad { get; set; }
+    public decimal ImporteBase { get; set; }
+    public decimal? ImporteMinimo { get; set; }
+    public decimal? MejorOfertaActual { get; set; }
 }
 
 public class SubastaResumenOfertasDto
